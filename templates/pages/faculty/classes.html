@@ -1,0 +1,420 @@
+{% extends 'base.html' %}
+{% block title %}Faculty Classes — EduPulse{% endblock %}
+{% block page_title %}Classes{% endblock %}
+{% block extra_css %}
+<style>
+.class-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  transition: border-color 0.2s;
+}
+.class-card:hover { border-color: rgba(123,47,255,0.3); }
+.class-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+.student-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-radius: 10px; margin-bottom: 6px;
+  background: rgba(123,47,255,0.04);
+  border: 1px solid rgba(123,47,255,0.08);
+  cursor: pointer; transition: background 0.15s;
+}
+.student-row:hover { background: rgba(123,47,255,0.12); }
+.student-row.selected { background: rgba(123,47,255,0.18); border-color: rgba(123,47,255,0.4); }
+.student-id-badge { font-size: 11px; color: #A78BFA; background: rgba(123,47,255,0.1); padding: 2px 8px; border-radius: 20px; }
+.enrolled-chip { font-size: 10px; color: #10B981; background: rgba(16,185,129,0.1); padding: 2px 8px; border-radius: 20px; }
+
+.search-bar { position: relative; margin-bottom: 12px; }
+.search-bar input { padding-left: 36px !important; }
+.search-bar i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 13px; }
+#search-results { max-height: 300px; overflow-y: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">My Classes</div>
+    <div class="page-subtitle">Manage class rosters and student enrollment</div>
+  </div>
+  <button class="btn btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Class</button>
+</div>
+
+<!-- Class List -->
+<div id="class-list"><div class="skeleton" style="height:200px;border-radius:16px"></div></div>
+
+<!-- ── Create Class Modal ───────────────────────────────────────── -->
+<div id="create-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeCreateModal()">
+  <div class="glass-card" style="padding:28px;max-width:420px;width:100%;margin:20px;position:relative">
+    <button onclick="closeCreateModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:17px;font-weight:800;margin-bottom:20px"><i class="fas fa-chalkboard" style="color:#7B2FFF;margin-right:8px"></i>Create Class</div>
+    <div class="form-group">
+      <label class="form-label">Class Name</label>
+      <input id="c-name" class="form-input" placeholder="e.g. B.Tech CSE — Batch A" required>
+    </div>
+    <button onclick="createClass()" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px">
+      <i class="fas fa-plus"></i> Create
+    </button>
+  </div>
+</div>
+
+<!-- ── Assign Teacher Modal ──────────────────────────────────────── -->
+<div id="teacher-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeTeacherModal()">
+  <div class="glass-card" style="padding:28px;max-width:540px;width:100%;margin:20px;position:relative;max-height:90vh;overflow-y:auto">
+    <button onclick="closeTeacherModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px"><i class="fas fa-chalkboard-teacher" style="color:#7B2FFF;margin-right:8px"></i>Assign Subject Teacher</div>
+    <div id="teacher-modal-class-name" style="font-size:12px;color:var(--text-muted);margin-bottom:16px"></div>
+
+    <div class="search-bar">
+      <i class="fas fa-search"></i>
+      <input id="teacher-search" class="form-input" placeholder="Search teacher by name or ID…" oninput="filterTeachers()">
+    </div>
+
+    <div id="teacher-results"><div style="text-align:center;padding:24px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div></div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeTeacherModal()" class="btn btn-ghost">Cancel</button>
+      <button onclick="confirmAssignTeacher()" class="btn btn-primary"><i class="fas fa-chalkboard-teacher"></i> Assign Teacher</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Student Modal ───────────────────────────────────────── -->
+<div id="add-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeAddModal()">
+  <div class="glass-card" style="padding:28px;max-width:520px;width:100%;margin:20px;position:relative;max-height:90vh;overflow-y:auto">
+    <button onclick="closeAddModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px"><i class="fas fa-user-plus" style="color:#7B2FFF;margin-right:8px"></i>Add Student</div>
+    <div id="add-modal-class-name" style="font-size:12px;color:var(--text-muted);margin-bottom:16px"></div>
+
+    <div class="search-bar">
+      <i class="fas fa-search"></i>
+      <input id="student-search" class="form-input" placeholder="Search by name or student ID…" oninput="filterStudents()">
+    </div>
+
+    <div id="search-results"><div style="text-align:center;padding:24px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div></div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeAddModal()" class="btn btn-ghost">Cancel</button>
+      <button onclick="enrollSelected()" class="btn btn-primary"><i class="fas fa-user-plus"></i> Enroll Selected</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _allStudents   = [];   /* all students loaded once */
+var _currentClass  = null; /* {id, name, students:[uid,...]} */
+var _selected      = new Set();
+
+async function onPageReady() {
+  loadClasses();
+}
+
+async function loadClasses() {
+  const d = await apiCall('/api/faculty/classes');
+  const classes = d.classes || [];
+  const el = document.getElementById('class-list');
+  if (!classes.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-chalkboard"></i><p>No classes yet — create one!</p></div>';
+    return;
+  }
+  el.innerHTML = classes.map(c => {
+    const cid  = c.id || c.classId;
+    const cnt  = (c.students||[]).length;
+    const subs = (c.subjects||[]).length;
+    return `
+    <div class="class-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:700;font-size:15px">${c.name || c.classId}</div>
+          <div class="class-meta"><i class="fas fa-users" style="margin-right:5px"></i>${cnt} students
+            &nbsp;·&nbsp;<i class="fas fa-book" style="margin-right:5px"></i>${subs} subjects
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick='openAddModal(${JSON.stringify({id:cid, name:c.name||c.classId, students:c.students||[]})})'  class="btn btn-sm btn-primary">
+            <i class="fas fa-user-plus"></i> Add Student
+          </button>
+          <button onclick='openTeacherModal(${JSON.stringify({id:cid, name:c.name||c.classId, teachers:c.teachers||[]})})' class="btn btn-sm btn-secondary">
+            <i class="fas fa-chalkboard-teacher"></i> Assign Teacher
+          </button>
+          <button onclick="openReport('/api/reports/class/${cid}')" class="btn btn-sm btn-ghost">
+            <i class="fas fa-file-pdf"></i>
+          </button>
+        </div>
+      </div>
+      ${cnt > 0 ? `<div style="margin-top:14px;border-top:1px solid var(--divider);padding-top:10px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:6px">Enrolled Students (${cnt})</div>
+        <div id="enrolled-${cid}" style="font-size:12px;color:var(--text-primary)">Loading…</div>
+      </div>` : ''}
+      ${(c.teachers||[]).length > 0 ? `<div style="margin-top:10px;${cnt===0?'border-top:1px solid var(--divider);padding-top:10px':''}">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:6px">Assigned Teachers (${(c.teachers||[]).length})</div>
+        <div id="teachers-${cid}" style="font-size:12px">Loading…</div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  /* Load student names for enrolled lists */
+  classes.forEach(c => {
+    const cid = c.id || c.classId;
+    const students = c.students || [];
+    if (students.length > 0) loadEnrolledNames(cid, students);
+    const teachers = c.teachers || [];
+    if (teachers.length > 0) loadTeacherChips(cid, teachers);
+  });
+}
+
+async function loadTeacherChips(cid, teacherRefs) {
+  const el = document.getElementById('teachers-'+cid);
+  if (!el) return;
+  if (!_allTeachers.length) {
+    try { const r = await apiCall('/api/faculty/teachers'); _allTeachers = r.teachers || []; } catch(e) {}
+  }
+  const map = {};
+  _allTeachers.forEach(t => { map[t.uid] = t; });
+
+  el.innerHTML = teacherRefs.map(ref => {
+    const uid  = typeof ref === 'string' ? ref : ref.uid;
+    const subj = typeof ref === 'string' ? '' : ref.subjectId;
+    const t    = map[uid];
+    const name = t ? t.name : uid.slice(0,8)+'…';
+    const subject = subj || (t && t.subject) || '';
+    return `
+    <span style="display:inline-flex;align-items:center;gap:6px;margin:2px 4px 2px 0;padding:4px 10px;border-radius:20px;background:rgba(16,185,129,0.08);font-size:12px;border:1px solid rgba(16,185,129,0.15)">
+      <i class="fas fa-chalkboard-teacher" style="color:#10B981;font-size:10px"></i>
+      ${name}
+      ${subject ? `<span style="font-size:10px;color:#10B981;background:rgba(16,185,129,0.12);padding:1px 7px;border-radius:20px">${subject}</span>` : ''}
+      <button onclick="removeTeacher('${cid}','${uid}','${name.replace(/'/g,"\\'")}')"
+              title="Remove teacher"
+              style="background:none;border:none;cursor:pointer;padding:0 2px;color:#EF4444;font-size:11px;line-height:1;display:flex;align-items:center">✕</button>
+    </span>`;
+  }).join('');
+}
+
+async function removeTeacher(cid, uid, name) {
+  if (!confirm(`Remove ${name} from this class?`)) return;
+  try {
+    showLoader('Removing teacher…');
+    await apiCall(`/api/faculty/classes/${cid}/teachers/${uid}`, 'DELETE');
+    showToast(`${name} removed`, 'success');
+    _allTeachers = [];
+    loadClasses();
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+
+async function loadEnrolledNames(cid, uids) {
+  const el = document.getElementById('enrolled-'+cid);
+  if (!el) return;
+  /* fetch all students once */
+  if (!_allStudents.length) {
+    try {
+      const r = await apiCall('/api/faculty/students/all');
+      _allStudents = r.students || [];
+    } catch(e) {}
+  }
+  const map = {};
+  _allStudents.forEach(s => { map[s.uid] = s; });
+  el.innerHTML = uids.map(uid => {
+    const s = map[uid];
+    const name = s ? s.name : uid.slice(0,8)+'…';
+    const cid2 = s ? s.customId : '';
+    return `
+    <span style="display:inline-flex;align-items:center;gap:6px;margin:2px 4px 2px 0;padding:4px 10px;border-radius:20px;background:rgba(123,47,255,0.08);font-size:12px">
+      ${name}
+      ${cid2 ? `<span class="student-id-badge">${cid2}</span>` : ''}
+      <button onclick="removeStudent('${cid}','${uid}','${name.replace(/'/g,"\\\'")}')"
+              title="Remove from class"
+              style="background:none;border:none;cursor:pointer;padding:0 2px;color:#EF4444;font-size:11px;line-height:1;display:flex;align-items:center"
+              >✕</button>
+    </span>`;
+  }).join('');
+}
+
+async function removeStudent(cid, uid, name) {
+  if (!confirm(`Remove ${name} from this class?`)) return;
+  try {
+    showLoader('Removing student…');
+    await apiCall(`/api/faculty/classes/${cid}/students/${uid}`, 'DELETE');
+    showToast(`${name} removed`, 'success');
+    _allStudents = [];   /* invalidate cache */
+    loadClasses();
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+
+async function openAddModal(cls) {
+  _currentClass = cls;
+  _selected.clear();
+  document.getElementById('add-modal-class-name').textContent = 'Class: ' + cls.name;
+  document.getElementById('student-search').value = '';
+  document.getElementById('add-modal').style.display = 'flex';
+
+  /* Load all students if not cached */
+  if (!_allStudents.length) {
+    const r = await apiCall('/api/faculty/students/all');
+    _allStudents = r.students || [];
+  }
+  filterStudents();
+}
+function closeAddModal() { document.getElementById('add-modal').style.display = 'none'; }
+
+function filterStudents() {
+  const q = document.getElementById('student-search').value.toLowerCase();
+  const list = q
+    ? _allStudents.filter(s => s.name.toLowerCase().includes(q) || (s.customId||'').toLowerCase().includes(q))
+    : _allStudents;
+
+  const enrolled = new Set(_currentClass ? _currentClass.students : []);
+  const container = document.getElementById('search-results');
+
+  if (!list.length) {
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">No students found</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(s => {
+    const isEnrolled = enrolled.has(s.uid);
+    const isSelected = _selected.has(s.uid);
+    return `
+    <div class="student-row ${isSelected?'selected':''}" id="row-${s.uid}"
+         onclick="${isEnrolled?'':("toggleSelect('"+s.uid+"')")}"
+         style="${isEnrolled?'opacity:0.5;cursor:not-allowed':''}">
+      <div>
+        <span style="font-weight:600;font-size:13px">${s.name}</span>
+        <span class="student-id-badge" style="margin-left:8px">${s.customId||'—'}</span>
+        ${s.classId ? `<span style="margin-left:6px;font-size:10px;color:var(--text-muted)">(in ${s.classId})</span>` : ''}
+      </div>
+      <div>
+        ${isEnrolled
+          ? '<span class="enrolled-chip"><i class="fas fa-check"></i> Enrolled</span>'
+          : (isSelected
+              ? '<i class="fas fa-check-circle" style="color:#7B2FFF"></i>'
+              : '<i class="far fa-circle" style="color:var(--text-muted)"></i>')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSelect(uid) {
+  if (_selected.has(uid)) _selected.delete(uid);
+  else _selected.add(uid);
+  filterStudents();
+}
+
+async function enrollSelected() {
+  if (!_selected.size) { showToast('Select at least one student','warning'); return; }
+  showLoader(`Enrolling ${_selected.size} student(s)…`);
+  let ok=0, fail=0;
+  for (const uid of _selected) {
+    try {
+      await apiCall(`/api/faculty/classes/${_currentClass.id}/students`,'POST',{studentUid:uid});
+      ok++;
+    } catch(e) { fail++; }
+  }
+  hideLoader();
+  if (fail) showToast(`Enrolled ${ok}, failed ${fail}`, 'warning');
+  else      showToast(`${ok} student(s) enrolled!`, 'success');
+  closeAddModal();
+  /* refresh list */
+  _allStudents = [];
+  loadClasses();
+}
+
+async function createClass() {
+  const name = document.getElementById('c-name').value.trim();
+  if (!name) { showToast('Enter class name','warning'); return; }
+  try {
+    showLoader('Creating class…');
+    await apiCall('/api/faculty/classes','POST',{name});
+    showToast('Class created!','success');
+    closeCreateModal();
+    loadClasses();
+  } catch(e) { showToast(e.message,'error'); }
+  finally { hideLoader(); }
+}
+
+function openCreateModal() { document.getElementById('create-modal').style.display = 'flex'; }
+function closeCreateModal() { document.getElementById('create-modal').style.display = 'none'; }
+var _allTeachers    = [];   /* cached teacher list */
+var _currentTeacherClass = null;
+var _selectedTeacher = null;
+
+async function openTeacherModal(cls) {
+  _currentTeacherClass = cls;
+  _selectedTeacher = null;
+  document.getElementById('teacher-modal-class-name').textContent = 'Class: ' + cls.name;
+  document.getElementById('teacher-search').value = '';
+  document.getElementById('teacher-modal').style.display = 'flex';
+
+  if (!_allTeachers.length) {
+    const r = await apiCall('/api/faculty/teachers');
+    _allTeachers = r.teachers || [];
+  }
+  filterTeachers();
+}
+function closeTeacherModal() { document.getElementById('teacher-modal').style.display = 'none'; }
+
+function filterTeachers() {
+  const q = document.getElementById('teacher-search').value.toLowerCase();
+  const list = q
+    ? _allTeachers.filter(t => t.name.toLowerCase().includes(q) || (t.customId||'').toLowerCase().includes(q) || (t.subject||'').toLowerCase().includes(q))
+    : _allTeachers;
+
+  const assignedUids = new Set((_currentTeacherClass.teachers||[]).map(t => t.uid||t));
+  const container = document.getElementById('teacher-results');
+
+  if (!list.length) {
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">No teachers found</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(t => {
+    const isAssigned = assignedUids.has(t.uid);
+    const isSelected = _selectedTeacher && _selectedTeacher.uid === t.uid;
+    return `
+    <div class="student-row ${isSelected?'selected':''}" id="trow-${t.uid}"
+         onclick="${isAssigned ? '' : ("selectTeacher('"+t.uid+"')")}"
+         style="${isAssigned?'opacity:0.5;cursor:not-allowed':''}">
+      <div>
+        <span style="font-weight:600;font-size:13px">${t.name}</span>
+        <span class="student-id-badge" style="margin-left:8px">${t.customId||'—'}</span>
+        ${t.subject ? `<span style="margin-left:8px;font-size:11px;color:#A78BFA;background:rgba(123,47,255,0.1);padding:2px 8px;border-radius:20px">${t.subject}</span>` : ''}
+      </div>
+      <div>
+        ${isAssigned
+          ? '<span class="enrolled-chip"><i class="fas fa-check"></i> Assigned</span>'
+          : (isSelected
+              ? '<i class="fas fa-check-circle" style="color:#7B2FFF"></i>'
+              : '<i class="far fa-circle" style="color:var(--text-muted)"></i>')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectTeacher(uid) {
+  _selectedTeacher = _allTeachers.find(t => t.uid === uid) || null;
+  filterTeachers();
+}
+
+async function confirmAssignTeacher() {
+  if (!_selectedTeacher) { showToast('Select a teacher first', 'warning'); return; }
+  try {
+    showLoader('Assigning teacher…');
+    await apiCall(`/api/faculty/classes/${_currentTeacherClass.id}/teachers`, 'POST', {
+      teacherUid: _selectedTeacher.uid,
+      subjectId : _selectedTeacher.subject || ''
+    });
+    showToast(`${_selectedTeacher.name} assigned!`, 'success');
+    closeTeacherModal();
+    _allTeachers = [];
+    loadClasses();
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+</script>
+{% endblock %}

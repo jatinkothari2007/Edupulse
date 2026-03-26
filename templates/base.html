@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{% block title %}EduPulse{% endblock %}</title>
+<meta name="description" content="EduPulse — Proactive Academic Risk Detection System">
+
+<!-- THEME — runs before render to prevent flash -->
+<script>
+(function(){
+    var t = localStorage.getItem('edupulse-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
+
+<!-- Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- CSS — ORDER MATTERS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/3d-liquid-glass.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/theme-overrides.css') }}">
+{% block extra_css %}{% endblock %}
+
+<!-- Firebase SDKs (before body so auth fires early) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<!-- Chart.js + CryptoJS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+
+<!-- Particle canvas — z-index 0, behind everything -->
+<canvas id="particle-canvas"></canvas>
+
+<!-- Full app wrapper -->
+<div class="app-wrapper">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-edu">Edu</span><span class="logo-pulse">Pulse</span>
+    </div>
+
+    <div class="sidebar-user-card">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <div class="user-details">
+        <div class="user-name"    id="sidebar-user-name">Loading…</div>
+        <div class="user-role"    id="sidebar-user-role"></div>
+        <div class="user-subject" id="sidebar-subject-label" style="display:none"></div>
+        <div class="user-id"      id="sidebar-user-id"></div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+    <div class="sidebar-bottom">
+      <button class="btn-logout" onclick="handleLogout()">
+        <i class="fas fa-sign-out-alt"></i> Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ───────────────────────────────── -->
+  <div class="main-content">
+
+    <!-- Top header bar -->
+    <header class="top-header">
+      <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <div class="header-title-wrap">
+        <h1 class="header-title" id="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+        <p class="header-subtitle" id="page-subtitle">{% block page_subtitle %}{% endblock %}</p>
+      </div>
+
+      <div class="header-controls">
+        <!-- Notification bell -->
+        <div style="position:relative">
+          <button class="icon-btn" id="notif-bell" onclick="toggleNotifPanel()" title="Notifications">
+            <i class="fas fa-bell"></i>
+            <span class="notif-badge hidden" id="notif-badge">0</span>
+          </button>
+        </div>
+
+        <!-- Sound toggle -->
+        <button class="icon-btn" id="sound-toggle-btn" onclick="toggleSound()" title="Toggle Sound">
+          <i id="sound-icon" class="fas fa-volume-up"></i>
+        </button>
+
+        <!-- Theme toggle -->
+        <button class="theme-btn" id="theme-toggle-btn" onclick="toggleTheme()">
+          <i id="theme-icon" class="fas fa-moon"></i>
+          <span id="theme-label">Dark</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Notification panel (absolute positioned under header) -->
+    <div class="notif-panel hidden" id="notif-panel" style="position:absolute;top:64px;right:16px;z-index:200">
+      <div class="notif-panel-header">
+        <span>Notifications</span>
+        <button class="text-btn" onclick="markAllRead()">Mark all read</button>
+      </div>
+      <div id="notif-list" class="notif-list">
+        <div class="empty-state">
+          <i class="fas fa-check-circle"></i>
+          <p>You're all caught up! 🎉</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page content — scrollable -->
+    <main class="page-content" id="page-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div><!-- /.main-content -->
+</div><!-- /.app-wrapper -->
+
+<!-- Mobile sidebar overlay -->
+<div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Global loader -->
+<div id="global-loader" class="global-loader hidden">
+  <div class="loader-spinner"></div>
+  <span>Loading…</span>
+</div>
+
+<!-- ── EduPulse Scripts (ORDER MATTERS) ──────────────── -->
+<script src="{{ url_for('static', filename='js/firebase-init.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cache.js') }}"></script>
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+<script src="{{ url_for('static', filename='js/particles.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tilt3d.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notification-sound.js') }}"></script>
+<script src="{{ url_for('static', filename='js/messaging.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/risk-display.js') }}"></script>
+<script src="{{ url_for('static', filename='js/heatmap.js') }}"></script>
+
+{% block extra_js %}{% endblock %}
+{% block scripts %}{% endblock %}
+
+<script id="ep-boot">
+/* ── Sub-page boot: call onPageReady(user) after auth settles ── */
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof onPageReady !== 'function') return;
+  waitForAuth().then(user => {
+    if (!user) { window.location.href = '/'; return; }
+    try { onPageReady(user); } catch(e) { console.error('[EduPulse] onPageReady error:', e); }
+  });
+});
+</script>
+
+
+</body>
+</html>

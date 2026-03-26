@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Subjects — EduPulse{% endblock %}
+{% block page_title %}Subjects{% endblock %}
+{% block page_roles_check %}requireLogin(['admin','faculty_advisor','subject_teacher']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/faculty"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/subjects"><i class="fas fa-book"></i>Subjects</a>
+<a class="nav-link" href="/pages/attendance"><i class="fas fa-calendar-check"></i>Attendance</a>
+<a class="nav-link" href="/pages/assignments"><i class="fas fa-tasks"></i>Assignments</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Subjects</div>
+<div class="page-subtitle">Manage subjects and teacher assignments</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="filter-row">
+    <input class="form-input" id="subj-class" placeholder="Class ID" style="width:200px">
+    <button class="btn btn-secondary btn-sm" onclick="loadSubjects()"><i class="fas fa-search"></i>Load</button>
+  </div>
+  <button class="btn btn-primary" onclick="openCreateSubjectModal()"><i class="fas fa-plus"></i>New Subject</button>
+</div>
+<div class="table-wrapper">
+  <table class="data-table">
+    <thead><tr><th>Subject Name</th><th>Code</th><th>Class ID</th><th>Teacher UID</th><th>Actions</th></tr></thead>
+    <tbody id="subj-body"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Enter a Class ID and click Load</td></tr></tbody>
+  </table>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let mySubjects=[];
+async function onPageReady(user){
+  if(user.role==='subject_teacher'){await loadTeacherSubjects();}
+}
+async function loadTeacherSubjects(){
+  try{const r=await apiCall('/api/teacher/subjects');mySubjects=r.data||[];renderSubjects(mySubjects);}
+  catch(e){showToast('Failed to load subjects','error');}
+}
+async function loadSubjects(){
+  const classId=document.getElementById('subj-class').value.trim();
+  if(!classId){showToast('Enter a class ID','warning');return;}
+  showLoader();try{
+    const r=await apiCall('/api/faculty/subjects?classId='+classId);
+    mySubjects=r.data||[];renderSubjects(mySubjects);
+  }catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+function renderSubjects(data){
+  const tb=document.getElementById('subj-body');
+  if(!data.length){tb.innerHTML='<tr><td colspan="5" class="empty-state">No subjects found</td></tr>';return;}
+  tb.innerHTML=data.map(s=>`<tr>
+    <td><strong>${s.name}</strong></td>
+    <td><code>${s.code||'—'}</code></td>
+    <td>${s.classId||'—'}</td>
+    <td style="font-size:12px;color:var(--text-muted)">${s.teacherId||'Not assigned'}</td>
+    <td><button class="btn btn-sm" style="background:rgba(123,47,255,0.10);color:#7B2FFF" onclick="assignTeacher('${s.id}','${s.classId}')"><i class="fas fa-user-plus"></i>Assign Teacher</button></td>
+  </tr>`).join('');
+}
+function openCreateSubjectModal(){
+  openModal('Create Subject',`
+    <div class="form-group"><label class="form-label">Class ID</label><input class="form-input" id="m-cid" placeholder="Class ID"></div>
+    <div class="form-group"><label class="form-label">Subject Name</label><input class="form-input" id="m-name" placeholder="e.g. Data Structures"></div>
+    <div class="form-group"><label class="form-label">Code</label><input class="form-input" id="m-code" placeholder="e.g. CS301"></div>`,async()=>{
+    const cid=document.getElementById('m-cid').value.trim(),name=document.getElementById('m-name').value.trim();
+    if(!cid||!name){showToast('Class ID and name required','warning');return;}
+    showLoader();try{await apiCall('/api/faculty/subjects','POST',{classId:cid,name,code:document.getElementById('m-code').value});closeModal();showToast('Subject created!','success');document.getElementById('subj-class').value=cid;loadSubjects();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+function assignTeacher(subjectId,classId){
+  openModal('Assign Teacher',`
+    <div class="form-group"><label class="form-label">Teacher UID</label><input class="form-input" id="m-tid" placeholder="Firebase UID of teacher"></div>`,async()=>{
+    const tid=document.getElementById('m-tid').value.trim();
+    if(!tid){showToast('Teacher UID required','warning');return;}
+    showLoader();try{await apiCall('/api/faculty/subjects/'+subjectId+'/assign-teacher','POST',{teacherId:tid,classId});closeModal();showToast('Teacher assigned!','success');loadSubjects();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

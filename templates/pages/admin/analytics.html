@@ -1,0 +1,300 @@
+{% extends 'base.html' %}
+{% block title %}System Analytics — EduPulse{% endblock %}
+{% block page_title %}System Analytics{% endblock %}
+{% block extra_css %}
+<style>
+.an-stats   { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+.an-charts  { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+.an-chart-card { padding:20px; }
+.an-chart-inner { position:relative; height:220px; }
+
+/* Audit table */
+.an-table { width:100%; border-collapse:collapse; }
+.an-table thead tr { background:rgba(123,47,255,0.08); border-bottom:2px solid rgba(123,47,255,0.15); }
+.an-table thead th { padding:10px 16px; text-align:left; font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-muted); }
+.an-table tbody tr { border-bottom:1px solid rgba(123,47,255,0.07); transition:background .15s; }
+.an-table tbody tr:hover { background:rgba(123,47,255,0.04); }
+.an-table tbody tr:last-child { border-bottom:none; }
+.an-table tbody td { padding:11px 16px; font-size:12px; vertical-align:middle; }
+.action-chip {
+  display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700;
+  background:rgba(123,47,255,0.10); color:#A78BFA;
+}
+
+/* Broadcast bar */
+.bc-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.bc-input { flex:2; min-width:140px; padding:8px 12px; border-radius:10px; border:1px solid rgba(123,47,255,0.2); background:rgba(15,10,30,0.7); color:var(--text-primary); font-size:13px; }
+.bc-input:focus { outline:none; border-color:#7B2FFF; }
+
+@media(max-width:700px){ .an-charts { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">System Analytics</div>
+    <div class="page-subtitle">Full system view of users, risk, and activity</div>
+  </div>
+  <button class="btn btn-ghost" onclick="onPageReady()"><i class="fas fa-sync"></i> Refresh</button>
+</div>
+
+<!-- Stat cards -->
+<div class="an-stats" id="an-stats">
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(123,47,255,0.12)"><i class="fas fa-users" style="color:#7B2FFF"></i></div><div class="stat-info"><div class="stat-value" id="an-total">—</div><div class="stat-label">Total Users</div></div></div>
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-user-graduate" style="color:#10B981"></i></div><div class="stat-info"><div class="stat-value" id="an-students">—</div><div class="stat-label">Students</div></div></div>
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(244,114,182,0.12)"><i class="fas fa-chalkboard-teacher" style="color:#F472B6"></i></div><div class="stat-info"><div class="stat-value" id="an-teachers">—</div><div class="stat-label">Teachers</div></div></div>
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.12)"><i class="fas fa-exclamation-triangle" style="color:#EF4444"></i></div><div class="stat-info"><div class="stat-value" id="an-highrisk">—</div><div class="stat-label">High Risk</div></div></div>
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-minus-circle" style="color:#F59E0B"></i></div><div class="stat-info"><div class="stat-value" id="an-medrisk">—</div><div class="stat-label">Medium Risk</div></div></div>
+  <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-check-circle" style="color:#10B981"></i></div><div class="stat-info"><div class="stat-value" id="an-lowrisk">—</div><div class="stat-label">Low Risk</div></div></div>
+</div>
+
+<!-- Charts -->
+<div class="an-charts">
+  <div class="glass-card an-chart-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-size:14px;font-weight:700">User Distribution</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Users across all roles</div>
+      </div>
+    </div>
+    <div class="an-chart-inner"><canvas id="user-chart"></canvas></div>
+    <div id="user-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:14px"></div>
+  </div>
+
+  <div class="glass-card an-chart-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-size:14px;font-weight:700">Risk Distribution</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Student risk level breakdown</div>
+      </div>
+    </div>
+    <div class="an-chart-inner"><canvas id="risk-chart"></canvas></div>
+    <div id="risk-legend" style="display:flex;justify-content:center;gap:20px;margin-top:14px"></div>
+  </div>
+</div>
+
+<!-- Broadcast -->
+<div class="glass-card" style="padding:20px;margin-bottom:20px">
+  <div style="font-size:14px;font-weight:700;margin-bottom:14px"><i class="fas fa-broadcast-tower" style="margin-right:8px;color:#7B2FFF"></i>Broadcast Message</div>
+  <div class="bc-bar">
+    <select id="bc-role" class="bc-input" style="flex:0;min-width:160px">
+      <option value="">All Roles</option>
+      <option value="admin">Admin</option>
+      <option value="faculty_advisor">Faculty Advisor</option>
+      <option value="subject_teacher">Subject Teacher</option>
+      <option value="counsellor">Counsellor</option>
+      <option value="student">Student</option>
+    </select>
+    <input id="bc-title" class="bc-input" placeholder="Title…">
+    <input id="bc-msg"   class="bc-input" style="flex:3" placeholder="Message to broadcast…">
+    <button class="btn btn-primary" onclick="broadcast()"><i class="fas fa-paper-plane"></i> Send</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _uChart = null, _rChart = null;
+var ROLE_COLORS = {
+  admin           : '#7B2FFF',
+  faculty_advisor : '#F59E0B',
+  subject_teacher : '#F472B6',
+  counsellor      : '#3B82F6',
+  student         : '#10B981',
+};
+var ROLE_LABELS = {
+  admin:'Admin', faculty_advisor:'Faculty Advisor',
+  subject_teacher:'Subject Teacher', counsellor:'Counsellor', student:'Student'
+};
+
+async function _anLoad() {
+  /* Uses cachedApiCall — same endpoint as Admin Dashboard, proven to work */
+  try {
+    var d      = await cachedApiCall('/api/admin/analytics', 'GET', null, 120);
+    var counts = d.userCounts || {};
+    var risk   = d.riskDist   || {};
+    var total  = Object.values(counts).reduce(function(a,b){return a+b;},0);
+
+    document.getElementById('an-total').textContent    = total;
+    document.getElementById('an-students').textContent = counts.student||0;
+    document.getElementById('an-teachers').textContent = counts.subject_teacher||0;
+    document.getElementById('an-highrisk').textContent = risk.HIGH||0;
+    document.getElementById('an-medrisk').textContent  = risk.MEDIUM||0;
+    document.getElementById('an-lowrisk').textContent  = risk.LOW||0;
+
+    buildUserChart(counts, total);
+    buildRiskChart(risk);
+  } catch(e) {
+    showToast('Failed to load analytics: ' + e.message, 'error');
+    console.error('[Analytics]', e);
+  }
+}
+
+/* ── Self-execute: waitForAuth resolves immediately when already logged in ── */
+/* Works via SPA navigation, DOMContentLoaded, OR direct URL load            */
+waitForAuth().then(function(user) {
+  if (user) _anLoad();
+});
+
+/* Keep onPageReady + window assignments so Refresh button and router also work */
+window.onPageReady = function() { return _anLoad(); };
+window.broadcast   = async function() {
+  var role  = document.getElementById('bc-role').value;
+  var title = document.getElementById('bc-title').value.trim();
+  var msg   = document.getElementById('bc-msg').value.trim();
+  if (!title || !msg) { showToast('Enter title and message', 'warning'); return; }
+  try {
+    var r = await apiCall('/api/admin/broadcast', 'POST', {
+      roles   : role ? [role] : [],
+      title   : title,
+      message : msg
+    });
+    showToast('Broadcast sent to ' + (r.sent||0) + ' users', 'success');
+    document.getElementById('bc-title').value = '';
+    document.getElementById('bc-msg').value   = '';
+  } catch(e) { showToast(e.message, 'error'); }
+};
+
+
+function buildUserChart(counts, total) {
+  var keys    = Object.keys(counts);
+  var vals    = keys.map(function(k){ return counts[k]; });
+  var colors  = keys.map(function(k){ return ROLE_COLORS[k]||'#7B2FFF'; });
+  var labels  = keys.map(function(k){ return ROLE_LABELS[k]||k; });
+  var pct     = function(v){ return total ? Math.round(v/total*100) : 0; };
+
+  var ctx = document.getElementById('user-chart');
+  if (_uChart) _uChart.destroy();
+  _uChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:labels, datasets:[{ data:vals, backgroundColor:colors.map(function(c){return c+'cc';}), borderColor:colors, borderWidth:2, hoverOffset:8 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'58%',
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(c){ return '  '+c.label+': '+c.raw+' ('+pct(c.raw)+'%)'; } } }
+      }
+    },
+    plugins:[{ id:'ct', beforeDraw:function(chart){
+      var w=chart.width,h=chart.height,c=chart.ctx;
+      c.save(); c.font='bold 20px Inter,sans-serif';
+      c.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--text-primary')||'#fff';
+      c.textAlign='center'; c.textBaseline='middle';
+      c.fillText(total, w/2, h/2-8);
+      c.font='11px Inter,sans-serif'; c.fillStyle='#999';
+      c.fillText('Users', w/2, h/2+10); c.restore();
+    }}]
+  });
+  document.getElementById('user-legend').innerHTML = labels.map(function(l,i){
+    return '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)">' +
+      '<span style="width:9px;height:9px;border-radius:50%;background:'+colors[i]+';display:inline-block"></span>' +
+      l+' <strong style="color:var(--text-primary)">'+vals[i]+'</strong></div>';
+  }).join('');
+}
+
+function buildRiskChart(risk) {
+  var vals   = [risk.LOW||0, risk.MEDIUM||0, risk.HIGH||0];
+  var total  = vals.reduce(function(a,b){return a+b;},0);
+  var colors = ['#10B981','#F59E0B','#EF4444'];
+  var labels = ['Low','Medium','High'];
+  var pct    = function(v){ return total ? Math.round(v/total*100) : 0; };
+
+  var ctx = document.getElementById('risk-chart');
+  if (_rChart) _rChart.destroy();
+  _rChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:labels,
+      datasets:[{ label:'Students', data:vals,
+        backgroundColor:colors.map(function(c){return c+'cc';}),
+        borderColor:colors, borderWidth:1.5, borderRadius:10, borderSkipped:false }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{ label:function(c){ return '  '+c.label+': '+c.raw+' students ('+pct(c.raw)+'%)'; } } }
+      },
+      scales:{
+        y:{ beginAtZero:true, ticks:{stepSize:1,color:'var(--text-muted)',font:{size:11}}, grid:{color:'rgba(123,47,255,0.07)'} },
+        x:{ grid:{display:false}, ticks:{color:'var(--text-muted)',font:{size:12,weight:'bold'}} }
+      }
+    },
+    plugins:[{ id:'bl', afterDatasetsDraw:function(chart){
+      var c=chart.ctx, ds=chart.data.datasets;
+      ds.forEach(function(d,di){
+        chart.getDatasetMeta(di).data.forEach(function(bar,i){
+          c.save(); c.font='bold 12px Inter,sans-serif';
+          c.fillStyle=colors[i]; c.textAlign='center'; c.textBaseline='bottom';
+          c.fillText(vals[i], bar.x, bar.y-4); c.restore();
+        });
+      });
+    }}]
+  });
+  document.getElementById('risk-legend').innerHTML = labels.map(function(l,i){
+    return '<div style="text-align:center">' +
+      '<div style="font-size:18px;font-weight:800;color:'+colors[i]+'">'+vals[i]+'</div>' +
+      '<div style="font-size:11px;color:var(--text-muted)">'+l+' ('+pct(vals[i])+'%)</div></div>';
+  }).join('');
+}
+
+function buildAuditTable(audit) {
+  var wrap = document.getElementById('audit-wrap');
+  if (!audit.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:48px"><i class="fas fa-history"></i><p>No audit logs found</p></div>';
+    return;
+  }
+  var timeAgo = function(ts) {
+    if (!ts) return '—';
+    var d = ts._seconds ? new Date(ts._seconds*1000) : new Date(ts);
+    if (isNaN(d)) return '—';
+    var m = Math.floor((Date.now()-d)/60000);
+    if (m<1) return 'Just now'; if (m<60) return m+'m ago';
+    var h=Math.floor(m/60); if (h<24) return h+'h ago';
+    return Math.floor(h/24)+'d ago — '+d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+  };
+  var ACTION_COLOR = {
+    user_created:'#10B981', user_deactivated:'#EF4444', user_reactivated:'#F59E0B',
+  };
+  wrap.innerHTML = '<table class="an-table"><thead><tr>' +
+    '<th style="width:130px">Time</th>' +
+    '<th>Performed By</th>' +
+    '<th>Target</th>' +
+    '<th>Action</th>' +
+    '<th>Role</th>' +
+    '</tr></thead><tbody>' +
+    audit.slice(0,30).map(function(a) {
+      var ac = ACTION_COLOR[a.action]||'#A78BFA';
+      var actionLabel = (a.action||'—').replace(/_/g,' ');
+      return '<tr>' +
+        '<td style="color:var(--text-muted);font-size:11px;white-space:nowrap">'+timeAgo(a.timestamp)+'</td>' +
+        '<td><span style="font-family:monospace;font-size:11px;background:rgba(123,47,255,0.1);color:#A78BFA;padding:2px 7px;border-radius:20px">'+(a.performedBy||'—').slice(0,12)+'…</span></td>' +
+        '<td><span style="font-family:monospace;font-size:11px;background:rgba(16,185,129,0.08);color:#10B981;padding:2px 7px;border-radius:20px">'+(a.customId||a.targetUid||'—')+'</span></td>' +
+        '<td><span style="background:'+ac+'15;color:'+ac+';padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700">'+actionLabel+'</span></td>' +
+        '<td style="color:var(--text-muted);font-size:11px">'+(a.targetRole||'—')+'</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+async function broadcast() {
+  var role  = document.getElementById('bc-role').value;
+  var title = document.getElementById('bc-title').value.trim();
+  var msg   = document.getElementById('bc-msg').value.trim();
+  if (!title || !msg) { showToast('Enter title and message', 'warning'); return; }
+  try {
+    /* Backend reads 'roles' as array; empty array = all users */
+    var r = await apiCall('/api/admin/broadcast', 'POST', {
+      roles   : role ? [role] : [],
+      title   : title,
+      message : msg
+    });
+    showToast('Broadcast sent to ' + (r.sent||0) + ' users', 'success');
+    document.getElementById('bc-title').value = '';
+    document.getElementById('bc-msg').value   = '';
+  } catch(e) { showToast(e.message, 'error'); }
+}
+</script>
+{% endblock %}

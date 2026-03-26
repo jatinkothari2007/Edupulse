@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+{% block title %}Pulse Quiz Management — EduPulse{% endblock %}
+{% block page_title %}Pulse Quiz Management{% endblock %}
+{% block extra_css %}
+<style>
+.quiz-table { width:100%; border-collapse:collapse; }
+.quiz-table thead tr {
+  background: rgba(123,47,255,0.08);
+  border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.quiz-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.quiz-table tbody tr {
+  border-bottom: 1px solid rgba(123,47,255,0.07);
+  transition: background 0.15s;
+}
+.quiz-table tbody tr:last-child { border-bottom: none; }
+.quiz-table tbody tr:hover     { background: rgba(123,47,255,0.04); }
+.quiz-table tbody td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
+.cls-chip {
+  font-family: monospace; font-size: 11px; font-weight: 700;
+  background: rgba(123,47,255,0.10); color: #A78BFA;
+  padding: 3px 9px; border-radius: 20px;
+}
+.q-act { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s; }
+.q-act-res { background:rgba(123,47,255,0.12); color:#A78BFA; }
+.q-act-res:hover { background:rgba(123,47,255,0.25); }
+.q-act-pdf { background:rgba(239,68,68,0.10);  color:#EF4444; }
+.q-act-pdf:hover  { background:rgba(239,68,68,0.22); }
+</style>
+{% endblock %}
+{% block content %}
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Pulse Quiz Management</div>
+    <div class="page-subtitle">Schedule AI-generated wellbeing quizzes for your class</div>
+  </div>
+  <button class="btn btn-primary" onclick="openScheduleModal()"><i class="fas fa-plus"></i> Schedule Quiz</button>
+</div>
+
+<!-- Summary stats -->
+<div class="stats-grid-3" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)"><i class="fas fa-clipboard-list" style="color:#7B2FFF"></i></div>
+    <div class="stat-info"><div class="stat-value" id="q-total">—</div><div class="stat-label">Total Quizzes</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-check-circle" style="color:#10B981"></i></div>
+    <div class="stat-info"><div class="stat-value" id="q-completed">—</div><div class="stat-label">Completed</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-clock" style="color:#F59E0B"></i></div>
+    <div class="stat-info"><div class="stat-value" id="q-scheduled">—</div><div class="stat-label">Scheduled</div></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+  <div style="overflow-x:auto">
+    <div id="quiz-list"><div class="skeleton" style="height:220px;margin:24px"></div></div>
+  </div>
+</div>
+
+<!-- ── Schedule Quiz Modal ─────────────────────────────────────────────── -->
+<div id="schedule-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)document.getElementById('schedule-modal').style.display='none'">
+  <div class="glass-card" style="padding:28px;max-width:440px;width:100%;margin:20px;position:relative">
+    <button onclick="document.getElementById('schedule-modal').style.display='none'" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:20px;color:var(--text-muted);cursor:pointer">×</button>
+    <div class="section-title" style="margin-bottom:20px">Schedule Quiz</div>
+    <div class="form-group"><label class="form-label">Class</label><select id="q-class" class="form-input"></select></div>
+    <div class="form-group"><label class="form-label">Title</label><input id="q-title" class="form-input" value="Pulse Quiz"></div>
+    <div class="form-group"><label class="form-label">Scheduled Date</label><input id="q-date" type="date" class="form-input"></div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Questions are AI-generated. 10 case-based wellbeing questions.</p>
+    <button onclick="scheduleQuiz()" id="q-btn" class="btn btn-primary" style="width:100%;justify-content:center"><i class="fas fa-brain"></i> Generate &amp; Schedule</button>
+  </div>
+</div>
+
+<!-- ── Results Modal ───────────────────────────────────────────────────── -->
+<div id="results-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)document.getElementById('results-modal').style.display='none'">
+  <div class="glass-card" style="padding:32px;max-width:760px;width:100%;margin:20px;max-height:88vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('results-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer">×</button>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div id="res-title" style="font-size:20px;font-weight:700"></div>
+        <div id="res-meta" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
+      </div>
+      <button onclick="printResults()" class="btn btn-secondary"><i class="fas fa-file-pdf"></i> Download Report</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:24px" id="res-summary"></div>
+    <div style="font-weight:700;margin-bottom:10px;font-size:14px">Student Results</div>
+    <div id="res-table"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let _classes = [];
+let _quizzes = [];
+let _currentResults = null;
+let _currentQuiz = null;
+
+async function onPageReady() {
+  const [cd, qd] = await Promise.all([
+    apiCall('/api/faculty/classes'),
+    apiCall('/api/faculty/quizzes')
+  ]);
+  _classes = cd.classes || [];
+  _quizzes = qd.quizzes || [];
+
+  const sel = document.getElementById('q-class');
+  sel.innerHTML = '<option value="">Select class</option>';
+  _classes.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.name; sel.appendChild(o);
+  });
+  document.getElementById('q-date').value = new Date().toISOString().slice(0, 10);
+
+  renderQuizList();
+}
+
+function renderQuizList() {
+  const total = _quizzes.length;
+  const completed = _quizzes.filter(q => q.status === 'completed').length;
+  const scheduled = _quizzes.filter(q => q.status === 'scheduled').length;
+  document.getElementById('q-total').textContent     = total;
+  document.getElementById('q-completed').textContent = completed;
+  document.getElementById('q-scheduled').textContent = scheduled;
+
+  const el = document.getElementById('quiz-list');
+  if (!total) {
+    el.innerHTML = '<div class="empty-state" style="padding:48px"><i class="fas fa-clipboard-list"></i><p>No quizzes scheduled yet</p></div>';
+    return;
+  }
+  el.innerHTML = `<table class="quiz-table">
+    <thead><tr>
+      <th>#</th><th>Title</th><th>Class</th><th>Scheduled Date</th>
+      <th>Questions</th><th>Status</th><th>Actions</th>
+    </tr></thead>
+    <tbody>${_quizzes.map((q, idx) => {
+      const st  = q.status || 'scheduled';
+      const stc = st==='completed'?'#10B981':st==='active'?'#F59E0B':'#7B2FFF';
+      const qCount = (q.questions||[]).length || 10;
+      const dateStr = q.scheduledAt ? new Date(q.scheduledAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+      return `<tr>
+        <td style="color:var(--text-muted);font-size:12px;font-weight:600">${idx+1}</td>
+        <td style="font-weight:700">${q.title||'Pulse Quiz'}</td>
+        <td><span class="cls-chip">${q.classId||'—'}</span></td>
+        <td style="font-size:12px">${dateStr}</td>
+        <td style="text-align:center;font-weight:600">${qCount}</td>
+        <td><span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:0.05em;background:${stc}18;color:${stc}">${st.toUpperCase()}</span></td>
+        <td><div style="display:flex;gap:6px">
+          <button class="q-act q-act-res" onclick="viewResults(${idx})"><i class="fas fa-chart-bar"></i> Results</button>
+          <button class="q-act q-act-pdf" onclick="downloadReport(${idx})" title="PDF report"><i class="fas fa-file-pdf"></i></button>
+        </div></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function viewResults(idx) {
+  const quiz = _quizzes[idx];
+  _currentQuiz = quiz;
+  document.getElementById('res-title').textContent = quiz.title || 'Quiz Results';
+  document.getElementById('res-meta').textContent = `Class: ${quiz.classId}  •  Scheduled: ${quiz.scheduledAt || '—'}  •  Status: ${quiz.status || '—'}`;
+  document.getElementById('res-summary').innerHTML = '<div class="skeleton" style="height:80px;grid-column:1/-1"></div>';
+  document.getElementById('res-table').innerHTML = '<div class="skeleton" style="height:160px"></div>';
+  document.getElementById('results-modal').style.display = 'flex';
+  try {
+    const qid = quiz.quizId || quiz.id;
+    const d = await apiCall(`/api/faculty/quizzes/${qid}/results`);
+    _currentResults = { quiz, results: d.results || [] };
+    renderResultsContent(quiz, d.results || []);
+  } catch(e) {
+    document.getElementById('res-table').innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="color:#EF4444"></i><p>${e.message}</p></div>`;
+  }
+}
+
+function renderResultsContent(quiz, results) {
+  const total = results.length;
+  const avg   = total ? (results.reduce((s, r) => s + (r.scorePercent || 0), 0) / total).toFixed(1) : 0;
+  const hi    = total ? Math.max(...results.map(r => r.scorePercent || 0)).toFixed(1) : 0;
+  const lo    = total ? Math.min(...results.map(r => r.scorePercent || 0)).toFixed(1) : 0;
+  const pass  = results.filter(r => (r.scorePercent || 0) >= 60).length;
+
+  const cards = [
+    { label: 'Responses',    val: total,         icon: 'fa-users',        clr: '#7B2FFF' },
+    { label: 'Avg Score',    val: `${avg}%`,     icon: 'fa-chart-line',   clr: '#10B981' },
+    { label: 'Highest',      val: `${hi}%`,      icon: 'fa-arrow-up',     clr: '#F59E0B' },
+    { label: 'Lowest',       val: `${lo}%`,      icon: 'fa-arrow-down',   clr: '#EF4444' },
+    { label: 'Passed (≥60%)',val: `${pass}/${total}`, icon: 'fa-check-circle', clr: '#10B981' },
+  ];
+  document.getElementById('res-summary').innerHTML = cards.map(c => `
+    <div style="background:${c.clr}14;border:1px solid ${c.clr}30;border-radius:12px;padding:14px;text-align:center">
+      <i class="fas ${c.icon}" style="color:${c.clr};font-size:18px;margin-bottom:6px;display:block"></i>
+      <div style="font-size:22px;font-weight:800;color:${c.clr}">${c.val}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.label}</div>
+    </div>`).join('');
+
+  if (!total) {
+    document.getElementById('res-table').innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No submissions yet for this quiz</p></div>';
+    return;
+  }
+  const sorted = [...results].sort((a, b) => (b.scorePercent || 0) - (a.scorePercent || 0));
+  document.getElementById('res-table').innerHTML = `<table class="ep-table">
+    <thead><tr><th>#</th><th>Student</th><th>ID</th><th>Score</th><th>Correct</th><th>Time</th><th>Distractions</th></tr></thead>
+    <tbody>${sorted.map((r, i) => {
+      const pct = r.scorePercent || 0;
+      const clr = pct >= 75 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
+      return `<tr>
+        <td style="color:var(--text-muted)">${i+1}</td>
+        <td style="font-weight:600">${r.studentName || '—'}</td>
+        <td><code>${r.studentCustomId || '—'}</code></td>
+        <td><div style="display:flex;align-items:center;gap:8px">
+          <div style="width:60px;height:6px;background:var(--divider);border-radius:3px">
+            <div style="width:${pct}%;height:100%;background:${clr};border-radius:3px"></div>
+          </div>
+          <span style="font-weight:700;color:${clr}">${pct.toFixed(1)}%</span>
+        </div></td>
+        <td style="text-align:center">${r.correctAnswers ?? '—'}/${r.totalQuestions ?? 10}</td>
+        <td>${r.timeTakenMin ? r.timeTakenMin + ' min' : '—'}</td>
+        <td style="text-align:center;color:${(r.distractionCount||0)>3?'#EF4444':'var(--text-muted)'}">${r.distractionCount ?? 0}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function printResults() {
+  if (!_currentResults) return;
+  generateReportWindow(_currentResults.quiz, _currentResults.results);
+}
+
+async function downloadReport(idx) {
+  const quiz = _quizzes[idx];
+  showToast('Loading results…', 'info');
+  try {
+    const qid = quiz.quizId || quiz.id;
+    const d = await apiCall(`/api/faculty/quizzes/${qid}/results`);
+    generateReportWindow(quiz, d.results || []);
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+function generateReportWindow(quiz, results) {
+  const total  = results.length;
+  const avg    = total ? (results.reduce((s, r) => s + (r.scorePercent || 0), 0) / total).toFixed(1) : 0;
+  const hi     = total ? Math.max(...results.map(r => r.scorePercent || 0)).toFixed(1) : 0;
+  const lo     = total ? Math.min(...results.map(r => r.scorePercent || 0)).toFixed(1) : 0;
+  const pass   = results.filter(r => (r.scorePercent || 0) >= 60).length;
+  const sorted = [...results].sort((a, b) => (b.scorePercent || 0) - (a.scorePercent || 0));
+
+  const rows = sorted.map((r, i) => {
+    const pct = r.scorePercent || 0;
+    const clr = pct >= 75 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
+    return `<tr style="background:${i%2===0?'#f8f4ff':'#fff'}">
+      <td style="padding:8px 12px">${i+1}</td>
+      <td style="padding:8px 12px;font-weight:600">${r.studentName || '—'}</td>
+      <td style="padding:8px 12px">${r.studentCustomId || '—'}</td>
+      <td style="padding:8px 12px;font-weight:700;color:${clr}">${pct.toFixed(1)}%</td>
+      <td style="padding:8px 12px;text-align:center">${r.correctAnswers ?? '—'}/${r.totalQuestions ?? 10}</td>
+      <td style="padding:8px 12px;text-align:center">${r.distractionCount ?? 0}</td>
+      <td style="padding:8px 12px;text-align:center">${pct >= 60 ? '✅ Pass' : '❌ Fail'}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>EduPulse — Quiz Report: ${quiz.title}</title>
+<style>
+  body{font-family:Arial,sans-serif;padding:32px;color:#1E1B4B;max-width:900px;margin:0 auto}
+  h1{color:#7B2FFF;border-bottom:3px solid #7B2FFF;padding-bottom:8px}
+  .meta{color:#666;font-size:13px;margin-bottom:24px}
+  .stats{display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap}
+  .stat{flex:1;min-width:120px;border:2px solid #7B2FFF33;border-radius:10px;padding:14px;text-align:center;background:#f8f4ff}
+  .sv{font-size:28px;font-weight:800;color:#7B2FFF}
+  .sl{font-size:11px;color:#666;margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th{background:#7B2FFF;color:#fff;padding:10px 12px;text-align:left}
+  @media print{body{padding:16px}}
+</style></head><body>
+<h1>EduPulse — Pulse Quiz Report</h1>
+<div class="meta">
+  <b>Quiz:</b> ${quiz.title} &nbsp;|&nbsp;
+  <b>Class:</b> ${quiz.classId} &nbsp;|&nbsp;
+  <b>Scheduled:</b> ${quiz.scheduledAt || '—'} &nbsp;|&nbsp;
+  <b>Status:</b> ${quiz.status || '—'} &nbsp;|&nbsp;
+  <b>Report Date:</b> ${new Date().toISOString().slice(0,10)}
+</div>
+<div class="stats">
+  <div class="stat"><div class="sv">${total}</div><div class="sl">Total Responses</div></div>
+  <div class="stat"><div class="sv">${avg}%</div><div class="sl">Average Score</div></div>
+  <div class="stat"><div class="sv">${hi}%</div><div class="sl">Highest Score</div></div>
+  <div class="stat"><div class="sv">${lo}%</div><div class="sl">Lowest Score</div></div>
+  <div class="stat"><div class="sv">${pass}/${total}</div><div class="sl">Passed (≥60%)</div></div>
+</div>
+<h2 style="color:#7B2FFF;font-size:15px;margin-bottom:8px">Student Results</h2>
+<table>
+  <thead><tr><th>#</th><th>Student</th><th>ID</th><th>Score</th><th>Correct</th><th>Distractions</th><th>Result</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999">No submissions yet</td></tr>'}</tbody>
+</table>
+<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px">
+  Generated by EduPulse Academic Risk Detection System &nbsp;•&nbsp; ${new Date().toLocaleString()}
+</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 600);
+}
+
+function openScheduleModal() {
+  document.getElementById('schedule-modal').style.display = 'flex';
+}
+
+async function scheduleQuiz() {
+  const classId     = document.getElementById('q-class').value;
+  const title       = document.getElementById('q-title').value;
+  const scheduledAt = document.getElementById('q-date').value;
+  if (!classId || !scheduledAt) { showToast('Select class and date', 'warning'); return; }
+  const btn = document.getElementById('q-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating with AI…';
+  try {
+    await apiCall('/api/faculty/quizzes', 'POST', { classId, title, scheduledAt });
+    showToast('Quiz scheduled! Students notified.', 'success');
+    document.getElementById('schedule-modal').style.display = 'none';
+    onPageReady();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-brain"></i> Generate &amp; Schedule';
+  }
+}
+</script>
+{% endblock %}

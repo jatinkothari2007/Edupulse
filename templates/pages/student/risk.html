@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Risk Score — EduPulse{% endblock %}
+{% block page_title %}My Risk Score{% endblock %}
+{% block content %}
+<div class="page-title">Academic Risk Score</div>
+<div class="page-subtitle">Your real-time academic health dashboard</div>
+<div class="grid-2" style="gap:24px;margin-bottom:24px">
+  <div class="glass-card" style="padding:32px;text-align:center">
+    <div id="risk-gauge-big"></div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="recalc()"><i class="fas fa-sync"></i> Recalculate</button>
+      <button class="btn btn-primary" onclick="openReport('/api/reports/student/'+_myUid)"><i class="fas fa-file-pdf"></i> Download Report</button>
+    </div>
+  </div>
+  <div class="glass-card" style="padding:24px">
+    <div class="section-title" style="margin-bottom:14px">Factor Breakdown</div>
+    <div id="factor-list"><div class="skeleton" style="height:200px"></div></div>
+  </div>
+</div>
+<div class="glass-card" style="padding:24px">
+  <div class="section-title" style="margin-bottom:14px">Recommendations</div>
+  <div id="recs-list"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let _myUid = '';
+async function onPageReady(user) {
+  _myUid = user.uid;
+  loadRisk();
+}
+async function loadRisk() {
+  try {
+    const r = await apiCall('/api/student/risk');
+    renderRiskGauge('risk-gauge-big', r.score, r.level);
+    const FMAP = {
+      examScore:'Exam Marks', attendanceScore:'Attendance',
+      submissionScore:'Assignments', quizScore:'Pulse Quiz',
+      moodScore:'Mood', engagementScore:'Engagement', gradeScore:'Avg Grade'
+    };
+    document.getElementById('factor-list').innerHTML = Object.entries(FMAP).map(([k, label]) => {
+      const v = (r.breakdown || {})[k] || 0;
+      const clr = v >= 75 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+          <span style="color:var(--text-secondary)">${label}</span>
+          <span style="font-weight:700;color:${clr}">${v}%</span>
+        </div>
+        <div style="height:6px;background:var(--divider);border-radius:4px">
+          <div style="width:${v}%;height:100%;background:${clr};border-radius:4px;transition:width 0.8s ease"></div>
+        </div>
+      </div>`;
+    }).join('');
+    const recs = r.recommendations || [];
+    document.getElementById('recs-list').innerHTML = recs.length
+      ? recs.map(rec => `<div style="padding:10px 14px;background:rgba(123,47,255,0.08);border-left:3px solid #7B2FFF;border-radius:0 10px 10px 0;margin-bottom:8px;font-size:13px;color:var(--text-secondary)">• ${rec}</div>`).join('')
+      : '<div class="empty-state"><i class="fas fa-check-circle" style="color:#10B981"></i><p>No recommendations — keep up the good work!</p></div>';
+  } catch(e) {
+    showToast('Failed to load risk data: ' + e.message, 'error');
+  }
+}
+async function recalc() {
+  showLoader('Recalculating…');
+  try {
+    await apiCall('/api/student/recalculate', 'POST');
+    showToast('Risk score updated', 'success');
+    loadRisk();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    hideLoader();
+  }
+}
+</script>
+{% endblock %}

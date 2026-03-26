@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Cases — EduPulse{% endblock %}
+{% block page_title %}Case Management{% endblock %}
+{% block extra_css %}
+<style>
+.cases-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.cases-title { font-size: 22px; font-weight: 800; color: var(--text-primary); }
+.cases-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.filter-select {
+    background: rgba(123,47,255,0.10);
+    border: 1px solid rgba(123,47,255,0.25);
+    color: var(--text-primary);
+    padding: 8px 30px 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237B2FFF'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    min-width: 130px;
+}
+.filter-select:focus { border-color: rgba(123,47,255,0.6); }
+
+.cases-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(123,47,255,0.08);
+    border: 1px solid rgba(123,47,255,0.20);
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 200px;
+    transition: border-color 0.2s;
+}
+.cases-search:focus-within { border-color: rgba(123,47,255,0.55); }
+.cases-search i { color: rgba(123,47,255,0.7); font-size: 13px; }
+.cases-search input { background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; width: 100%; }
+.cases-search input::placeholder { color: var(--text-muted); }
+
+.cases-table { width: 100%; border-collapse: collapse; }
+.cases-table thead tr {
+    background: rgba(123,47,255,0.08);
+    border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.cases-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.cases-table tbody tr {
+    border-bottom: 1px solid rgba(123,47,255,0.08);
+    transition: background 0.15s;
+}
+.cases-table tbody tr:last-child { border-bottom: none; }
+.cases-table tbody tr:hover { background: rgba(123,47,255,0.05); }
+.cases-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); vertical-align: middle; }
+.row-num { color: var(--text-muted); font-size: 12px; font-weight: 600; width: 32px; }
+.student-name { font-weight: 700; font-size: 13px; }
+.student-id   { font-size: 11px; color: var(--text-muted); font-family: monospace; margin-top: 2px; }
+
+.risk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.risk-badge.high   { background: rgba(239,68,68,0.12);   color: #EF4444; }
+.risk-badge.medium { background: rgba(245,158,11,0.12);  color: #F59E0B; }
+.risk-badge.low    { background: rgba(16,185,129,0.12);  color: #10B981; }
+
+.case-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.case-status.active { background: rgba(16,185,129,0.12); color: #10B981; }
+.case-status.closed { background: rgba(148,163,184,0.12); color: #94A3B8; }
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 13px;
+    text-decoration: none;
+}
+.action-btn.view { background: rgba(123,47,255,0.15); color: #7B2FFF; }
+.action-btn.view:hover { background: rgba(123,47,255,0.28); }
+.action-btn.msg  { background: rgba(16,185,129,0.12); color: #10B981; margin-left: 6px; }
+.action-btn.msg:hover  { background: rgba(16,185,129,0.25); }
+.action-btn.close-case { background: rgba(239,68,68,0.10); color: #EF4444; margin-left: 6px; }
+.action-btn.close-case:hover { background: rgba(239,68,68,0.22); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="cases-header">
+    <div class="cases-title">All Cases</div>
+    <div class="cases-controls">
+        <select id="case-filter" class="filter-select" onchange="applyFilters()">
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="closed">Closed</option>
+        </select>
+        <div class="cases-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="student-search" placeholder="Search student…" oninput="applyFilters()">
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+        <table class="cases-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Risk Score</th>
+                    <th>Case Status</th>
+                    <th>Last Mood</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="cases-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">
+                    <i class="fas fa-spinner fa-spin" style="font-size:22px;display:block;margin-bottom:10px"></i>Loading cases…
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _allCases = [];
+
+async function onPageReady() {
+    try {
+        const d = await apiCall('/api/counsellor/students');
+        _allCases = d.students || [];
+        renderTable(_allCases);
+    } catch(e) { showToast('Failed to load cases: ' + e.message, 'error'); }
+}
+
+function riskClass(level) { return (level||'low').toLowerCase(); }
+
+function renderTable(list) {
+    const tbody = document.getElementById('cases-tbody');
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+            <i class="fas fa-folder-open"></i><p>No cases found</p></div></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = list.map((s, i) => {
+        const lvl    = (s.level || s.riskLevel || 'LOW').toUpperCase();
+        const score  = s.score ?? s.riskScore ?? '—';
+        const status = (s.caseStatus || 'active').toLowerCase();
+        return `
+        <tr>
+            <td class="row-num">${i + 1}</td>
+            <td>
+                <div class="student-name">${s.name || '—'}</div>
+                <div class="student-id">${s.customId || s.uid || ''}</div>
+            </td>
+            <td>
+                <span class="risk-badge ${riskClass(lvl)}">
+                    ${score} — ${lvl}
+                </span>
+            </td>
+            <td>
+                <span class="case-status ${status}">
+                    <span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>
+                    ${status}
+                </span>
+            </td>
+            <td style="color:var(--text-muted);font-size:12px">${s.lastMood || '—'}</td>
+            <td style="white-space:nowrap">
+                <a href="/pages/counsellor/students" class="action-btn view" title="View Profile">
+                    <i class="fas fa-eye"></i>
+                </a>
+                <a href="/pages/messaging" class="action-btn msg" title="Send Message">
+                    <i class="fas fa-comment"></i>
+                </a>
+                ${status === 'active'
+                    ? `<button class="action-btn close-case" title="Close Case" onclick="closeCase('${s.uid}','${(s.name||'').replace(/'/g,"\\'")}')">
+                           <i class="fas fa-times-circle"></i>
+                       </button>`
+                    : ''}
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function applyFilters() {
+    const statusVal = document.getElementById('case-filter').value.toLowerCase();
+    const searchVal = (document.getElementById('student-search').value || '').toLowerCase();
+    const filtered  = _allCases.filter(s => {
+        const st = (s.caseStatus || 'active').toLowerCase();
+        return (!statusVal || st === statusVal)
+            && (!searchVal || (s.name || '').toLowerCase().includes(searchVal)
+                           || (s.customId || '').toLowerCase().includes(searchVal));
+    });
+    renderTable(filtered);
+}
+
+async function closeCase(uid, name) {
+    const msg = prompt(`Closing message for ${name} (required):`);
+    if (!msg) return;
+    showLoader('Closing case…');
+    try {
+        await apiCall(`/api/counsellor/cases/${uid}/close`, 'POST', { closingMessage: msg });
+        showToast(`Case for ${name} closed.`, 'success');
+        await onPageReady();
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { hideLoader(); }
+}
+</script>
+{% endblock %}

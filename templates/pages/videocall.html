@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+{% block title %}Video Call — EduPulse{% endblock %}
+{% block page_title %}Video Call{% endblock %}
+{% block extra_css %}
+<style>
+.jitsi-wrapper{position:relative;width:100%;height:calc(100vh - 200px);min-height:480px;border-radius:20px;overflow:hidden;background:#0a0a1a}
+#jitsi-frame{width:100%;height:100%;border:none;border-radius:20px}
+.call-overlay-bar{background:rgba(15,10,30,0.85);backdrop-filter:blur(12px);padding:14px 20px;border-radius:16px;display:flex;align-items:center;gap:14px;margin-bottom:16px;border:1px solid var(--card-border)}
+.ep-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center}
+.ep-modal-box{background:var(--card-bg);border:1px solid var(--card-border);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 60px rgba(0,0,0,0.4)}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ═══ PRE-CALL: sessions list ═══════════════════════════════════════════ -->
+<div id="precall-section">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="page-title" style="margin:0">Video Sessions</div>
+      <div class="page-subtitle" style="margin:0">Schedule and manage counselling calls</div>
+    </div>
+    <button class="btn btn-primary" onclick="openScheduleModal()">
+      <i class="fas fa-plus"></i> Schedule Session
+    </button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" style="margin-bottom:24px" id="session-stats">
+    <div class="skeleton" style="height:72px"></div>
+    <div class="skeleton" style="height:72px"></div>
+    <div class="skeleton" style="height:72px"></div>
+    <div class="skeleton" style="height:72px"></div>
+  </div>
+
+  <!-- Table -->
+  <div class="glass-card" style="padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">All Sessions</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="sess-filter" class="form-input" style="width:150px;padding:8px 12px;font-size:13px" onchange="filterSessions()">
+          <option value="">All Status</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="completed">Completed</option>
+        </select>
+        <input id="sess-search" class="form-input" placeholder="🔍  Search student…" style="width:200px;padding:8px 12px;font-size:13px" oninput="filterSessions()">
+      </div>
+    </div>
+    <div id="sessions-table"><div class="skeleton" style="height:200px"></div></div>
+  </div>
+</div>
+
+<!-- ═══ IN-CALL ════════════════════════════════════════════════════════════ -->
+<div id="call-section" style="display:none">
+  <div class="call-overlay-bar">
+    <div style="width:10px;height:10px;border-radius:50%;background:#10B981;box-shadow:0 0 10px #10B981;flex-shrink:0"></div>
+    <div style="flex:1">
+      <div style="font-weight:700;font-size:14px" id="call-header">Live Session</div>
+      <div style="font-size:12px;color:var(--text-muted)" id="call-subheader">with student</div>
+    </div>
+    <span id="call-timer" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#10B981">00:00</span>
+    <button class="btn btn-sm" style="background:#EF4444;color:white;gap:6px" onclick="leaveCall()">
+      <i class="fas fa-phone-slash"></i> End Call
+    </button>
+  </div>
+  <div class="jitsi-wrapper">
+    <div id="jitsi-container" style="width:100%;height:100%"></div>
+  </div>
+</div>
+
+<!-- ═══ POST-CALL ══════════════════════════════════════════════════════════ -->
+<div id="postcall-section" style="display:none">
+  <div class="glass-card" style="padding:40px;text-align:center;max-width:460px;margin:60px auto">
+    <i class="fas fa-check-circle" style="font-size:48px;color:#10B981;margin-bottom:16px;display:block"></i>
+    <div style="font-size:22px;font-weight:700;margin-bottom:8px">Call Ended</div>
+    <div id="call-summary" style="color:var(--text-secondary);font-size:14px;margin-bottom:24px"></div>
+    <div class="glass-card" style="padding:20px;text-align:left;margin-bottom:20px">
+      <div style="font-weight:700;margin-bottom:10px"><i class="fas fa-edit" style="color:#7B2FFF"></i> Session Notes</div>
+      <textarea id="session-notes" class="form-input" style="width:100%;min-height:100px;resize:vertical;font-size:13px" placeholder="Notes from this session…"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-primary" onclick="saveAndBack()"><i class="fas fa-save"></i> Save Notes &amp; Back</button>
+      <button class="btn btn-secondary" onclick="backToSessions()"><i class="fas fa-arrow-left"></i> Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCHEDULE MODAL ═════════════════════════════════════════════════════ -->
+<div id="schedule-modal" class="ep-modal" style="display:none" onclick="if(event.target===this)closeScheduleModal()">
+  <div class="ep-modal-box">
+    <button onclick="closeScheduleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer">×</button>
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px"><i class="fas fa-calendar-plus" style="color:#7B2FFF"></i> Schedule Session</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Create a video counselling session with a student</div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">Student</label>
+      <select id="modal-student" class="form-input" style="width:100%;padding:10px 12px">
+        <option value="">Loading students…</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">Date &amp; Time</label>
+      <input type="datetime-local" id="modal-datetime" class="form-input" style="width:100%;padding:10px 12px">
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-secondary" onclick="closeScheduleModal()" style="flex:1;justify-content:center">Cancel</button>
+      <button class="btn btn-primary" onclick="scheduleSession()" style="flex:1;justify-content:center"><i class="fas fa-check"></i> Schedule</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Jitsi Meet External API -->
+<script src="https://meet.jit.si/external_api.js"></script>
+<script>
+let _activeSession = null;
+let _allSessions   = [];
+let _students      = [];
+let _jitsiApi      = null;
+let _callStart     = null;
+let _timerInterval = null;
+
+async function onPageReady(user) {
+  loadSessions();
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+async function loadSessions() {
+  try {
+    const data = await apiCall('/api/counsellor/sessions');
+    _allSessions = data.sessions || [];
+    renderStats(_allSessions);
+    renderTable(_allSessions);
+  } catch(e) { showToast('Failed to load sessions: '+e.message,'error'); }
+}
+
+function renderStats(sessions) {
+  const total     = sessions.length;
+  const scheduled = sessions.filter(s=>s.status==='scheduled').length;
+  const completed = sessions.filter(s=>s.status==='completed').length;
+  const students  = new Set(sessions.map(s=>s.studentUid||s.studentId)).size;
+  document.getElementById('session-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(123,47,255,0.12)"><i class="fas fa-video" style="color:#7B2FFF"></i></div><div class="stat-info"><div class="stat-value">${total}</div><div class="stat-label">Total Sessions</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-clock" style="color:#F59E0B"></i></div><div class="stat-info"><div class="stat-value">${scheduled}</div><div class="stat-label">Scheduled</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-check" style="color:#10B981"></i></div><div class="stat-info"><div class="stat-value">${completed}</div><div class="stat-label">Completed</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(96,165,250,0.12)"><i class="fas fa-users" style="color:#60A5FA"></i></div><div class="stat-info"><div class="stat-value">${students}</div><div class="stat-label">Students</div></div></div>`;
+}
+
+function renderTable(sessions) {
+  const el = document.getElementById('sessions-table');
+  if (!sessions.length) {
+    el.innerHTML = `<div class="empty-state"><i class="fas fa-video"></i><p>No sessions yet — schedule one above</p></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div style="border-radius:14px;overflow:hidden;border:1px solid var(--card-border)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:rgba(123,47,255,0.12);border-bottom:2px solid var(--card-border)">
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center;width:40px">#</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Student</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Scheduled At</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Status</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Duration</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sessions.map((s, i) => {
+            const sid        = s.sessionId || s.id;
+            const bgStripe   = i%2===0?'transparent':'rgba(255,255,255,0.02)';
+            const isScheduled = s.status==='scheduled';
+            const stClr      = isScheduled?'#F59E0B':'#10B981';
+            const stIcon     = isScheduled?'fa-clock':'fa-check-circle';
+            const dur        = s.duration ? `${Math.floor(s.duration/60)}m ${s.duration%60}s` : '—';
+            return `<tr style="background:${bgStripe};transition:background 0.15s"
+              onmouseover="this.style.background='rgba(123,47,255,0.07)'"
+              onmouseout="this.style.background='${bgStripe}'">
+              <td style="padding:11px 14px;text-align:center;color:var(--text-muted);font-size:12px">${i+1}</td>
+              <td style="padding:11px 14px">
+                <div style="font-weight:600;font-size:13px">${s.studentName||'Student'}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${s.studentUid||s.studentId||''}</div>
+              </td>
+              <td style="padding:11px 14px;font-size:13px;color:var(--text-secondary)">${(s.scheduledAt||'—').replace('T',' ').slice(0,16)}</td>
+              <td style="padding:11px 14px;text-align:center">
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;color:${stClr};background:${stClr}18;border:1px solid ${stClr}30">
+                  <i class="fas ${stIcon}" style="font-size:10px"></i>${s.status||'scheduled'}
+                </span>
+              </td>
+              <td style="padding:11px 14px;text-align:center;font-size:13px;color:var(--text-muted)">${dur}</td>
+              <td style="padding:11px 14px;text-align:center">
+                ${isScheduled
+                  ? `<button onclick="joinSession('${sid}','${(s.studentName||'Student').replace(/'/g,"\\'")}','${(s.scheduledAt||'').replace('T',' ').slice(0,16)}')" class="btn btn-sm btn-primary"><i class="fas fa-video"></i> Join</button>`
+                  : '<span style="color:var(--text-muted);font-size:12px">—</span>'}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function filterSessions() {
+  const status = document.getElementById('sess-filter').value;
+  const term   = document.getElementById('sess-search').value.toLowerCase();
+  renderTable(_allSessions.filter(s =>
+    (!status || s.status===status) &&
+    (!term   || (s.studentName||'').toLowerCase().includes(term))
+  ));
+}
+
+// ── Schedule Modal ─────────────────────────────────────────────────────────
+async function openScheduleModal() {
+  document.getElementById('schedule-modal').style.display='flex';
+  const dt = new Date(Date.now() + 3600000);
+  document.getElementById('modal-datetime').value = dt.toISOString().slice(0,16);
+  if (!_students.length) {
+    try { const d = await apiCall('/api/counsellor/students'); _students = d.students||[]; } catch(e) { _students=[]; }
+  }
+  const sel = document.getElementById('modal-student');
+  sel.innerHTML = _students.length
+    ? _students.map(s=>`<option value="${s.uid}">${s.name} (${s.customId||s.uid})</option>`).join('')
+    : '<option value="">No students assigned</option>';
+}
+function closeScheduleModal() { document.getElementById('schedule-modal').style.display='none'; }
+
+async function scheduleSession() {
+  const studentUid  = document.getElementById('modal-student').value;
+  const scheduledAt = document.getElementById('modal-datetime').value;
+  if (!studentUid || !scheduledAt) { showToast('Please select a student and time','error'); return; }
+  try {
+    showLoader('Scheduling session…');
+    await apiCall('/api/counsellor/sessions','POST',{ studentUid, scheduledAt });
+    closeScheduleModal(); showToast('Session scheduled!','success'); loadSessions();
+  } catch(e) { showToast(e.message,'error'); } finally { hideLoader(); }
+}
+
+// ── Join Call via Jitsi ────────────────────────────────────────────────────
+async function joinSession(sid, studentName, scheduledAt) {
+  showLoader('Starting video call…');
+  try {
+    // Verify session (participant check)
+    await apiCall(`/api/videocall/session/${sid}`);
+    _activeSession = { sessionId: sid, studentName };
+
+    // Build Jitsi room name — strip non-alphanumeric to keep it URL-safe
+    const roomName = 'edupulse-' + sid.replace(/[^a-zA-Z0-9]/g,'');
+
+    document.getElementById('call-header').textContent   = `Session with ${studentName}`;
+    document.getElementById('call-subheader').textContent = `Scheduled: ${scheduledAt}`;
+    document.getElementById('precall-section').style.display='none';
+    document.getElementById('call-section').style.display='block';
+
+    // Load Jitsi iFrame
+    const container = document.getElementById('jitsi-container');
+    container.innerHTML = '';
+    _jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', {
+      roomName,
+      width : '100%',
+      height: '100%',
+      parentNode: container,
+      userInfo: { displayName: 'Counsellor' },
+      configOverwrite: {
+        startWithAudioMuted: false,
+        startWithVideoMuted: false,
+        prejoinPageEnabled : false,
+        disableModeratorIndicator: true,
+      },
+      interfaceConfigOverwrite: {
+        TOOLBAR_BUTTONS: ['microphone','camera','hangup','fullscreen','tileview'],
+        SHOW_JITSI_WATERMARK: false,
+        SHOW_BRAND_WATERMARK : false,
+        SHOW_WATERMARK_FOR_GUESTS: false,
+      },
+    });
+
+    _jitsiApi.addEventListeners({
+      videoConferenceLeft: leaveCall,
+    });
+
+    // Start duration timer
+    _callStart = Date.now();
+    _timerInterval = setInterval(() => {
+      const sec = Math.floor((Date.now()-_callStart)/1000);
+      const mm  = String(Math.floor(sec/60)).padStart(2,'0');
+      const ss  = String(sec%60).padStart(2,'0');
+      const el  = document.getElementById('call-timer');
+      if (el) el.textContent = `${mm}:${ss}`;
+    }, 1000);
+
+  } catch(e) { showToast('Call failed: '+e.message,'error'); } finally { hideLoader(); }
+}
+
+async function leaveCall() {
+  clearInterval(_timerInterval);
+  const duration = _callStart ? Math.floor((Date.now()-_callStart)/1000) : 0;
+  if (_jitsiApi) { try { _jitsiApi.dispose(); } catch(_){} _jitsiApi=null; }
+  if (_activeSession?.sessionId) {
+    try { await apiCall(`/api/videocall/session/${_activeSession.sessionId}/complete`,'PUT',{duration}); } catch(_){}
+  }
+  const mins = Math.floor(duration/60), secs = duration%60;
+  document.getElementById('call-summary').innerHTML = `<b>${_activeSession?.studentName||'Student'}</b><br>Duration: ${mins}m ${secs}s`;
+  document.getElementById('call-section').style.display='none';
+  document.getElementById('postcall-section').style.display='block';
+}
+
+async function saveAndBack() {
+  const notes = document.getElementById('session-notes').value;
+  if (notes && _activeSession?.sessionId) {
+    try {
+      await apiCall(`/api/counsellor/sessions/${_activeSession.sessionId}/notes`,'POST',{
+        notes, studentUid: _activeSession.studentUid||''
+      });
+      showToast('Notes saved','success');
+    } catch(_){}
+  }
+  backToSessions();
+}
+
+function backToSessions() {
+  document.getElementById('postcall-section').style.display='none';
+  document.getElementById('precall-section').style.display='block';
+  loadSessions();
+}
+</script>
+{% endblock %}

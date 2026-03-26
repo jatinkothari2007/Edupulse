@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% block title %}Student Dashboard — EduPulse{% endblock %}
+{% block page_title %}My Dashboard{% endblock %}
+{% block page_subtitle %}Your academic progress, attendance and risk score{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <div>
+    <h2 class="section-title">Welcome back, <span id="student-name">Student</span> 👋</h2>
+    <p class="section-subtitle">Here's your academic summary for today.</p>
+  </div>
+  <div class="flex gap-8">
+    <a href="/pages/student/risk"  class="btn btn-ghost">     <i class="fas fa-chart-line"></i>  My Risk</a>
+    <a href="/pages/student/mood"  class="btn btn-primary">   <i class="fas fa-smile"></i>        Check In</a>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)">
+      <i class="fas fa-calendar-check" style="color:#10B981"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-attendance"><div class="skeleton" style="height:28px;width:60px"></div></div>
+      <div class="stat-label">Attendance</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(96,165,250,0.12)">
+      <i class="fas fa-star" style="color:#60A5FA"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-avg-marks"><div class="skeleton" style="height:28px;width:60px"></div></div>
+      <div class="stat-label">Average Marks</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)">
+      <i class="fas fa-heartbeat" style="color:#F59E0B"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-risk-score"><div class="skeleton" style="height:28px;width:48px"></div></div>
+      <div class="stat-label">Risk Score</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)">
+      <i class="fas fa-tasks" style="color:#7B2FFF"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-pending-tasks"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">Pending Tasks</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="two-col">
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Marks Trend</p><p class="card-subtitle">Recent assessment scores</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="marks-trend-chart"></canvas></div>
+    </div>
+  </div>
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Attendance by Subject</p><p class="card-subtitle">Current semester</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="subject-att-chart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Risk gauge + Upcoming tasks -->
+<div class="two-col-wide-r">
+  <!-- Risk card -->
+  <div class="glass-card">
+    <div class="card-header"><p class="card-title">Risk Assessment</p></div>
+    <div class="card-body" style="text-align:center">
+      <div id="risk-level-display" style="font-size:48px;font-weight:800;margin:8px 0;color:#10B981">—</div>
+      <div id="risk-label" style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Calculating…</div>
+      <div style="height:10px;background:var(--divider);border-radius:5px;overflow:hidden;margin-bottom:16px">
+        <div id="risk-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#10B981,#F59E0B,#EF4444);transition:width 0.6s ease;border-radius:5px"></div>
+      </div>
+      <a href="/pages/student/risk" class="btn btn-ghost btn-sm"><i class="fas fa-info-circle"></i> Full Report</a>
+    </div>
+  </div>
+
+  <!-- Upcoming tasks -->
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Upcoming Tasks</p><p class="card-subtitle">Assignments &amp; quizzes due soon</p></div>
+      <a href="/pages/student/assignments" class="btn btn-ghost btn-sm">View All</a>
+    </div>
+    <div class="card-body" style="padding-top:0">
+      <div id="tasks-list">
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row mt-8"></div>
+        <div class="skeleton skeleton-row mt-8"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _marksTrend = null, _subjAtt = null;
+
+waitForAuth().then(user => {
+  if (!user) { window.location.href='/'; return; }
+  document.getElementById('student-name').textContent = (user.name||'Student').split(' ')[0];
+  listenNotifications(user.uid);
+  loadStudentDashboard(user);
+});
+
+async function loadStudentDashboard(user) {
+  try {
+    const [dashRes, markRes, attRes] = await Promise.all([
+      cachedApiCall('/api/student/dashboard','GET',null,90).catch(()=>({})),
+      cachedApiCall('/api/student/marks','GET',null,90).catch(()=>({marks:[]})),
+      cachedApiCall('/api/student/attendance','GET',null,90).catch(()=>({subjects:[]}))
+    ]);
+
+    const att      = dashRes.attendancePct  || attRes.overall  || 0;
+    const avgMarks = dashRes.avgMarks       || markRes.average || 0;
+    const risk     = dashRes.riskScore      || 0;
+    const riskLvl  = dashRes.riskLevel      || 'LOW';
+    const pending  = dashRes.pendingTasks   || 0;
+    const tasks    = dashRes.upcomingTasks  || [];
+    const mTrend   = markRes.trend          || markRes.marks   || [];
+    // Group attendance records by subject
+    const attRecords = attRes.records || [];
+    const subjMap = {};
+    attRecords.forEach(r => {
+      const s = r.subject || r.subjectId || 'Unknown';
+      if (!subjMap[s]) subjMap[s] = {present:0,late:0,total:0};
+      subjMap[s].total++;
+      if (r.status==='present') subjMap[s].present++;
+      else if (r.status==='late') subjMap[s].late++;
+    });
+    const subjects = Object.entries(subjMap).map(([name, v]) => ({
+      subject: name,
+      pct: v.total ? parseFloat(((v.present + v.late*0.5)/v.total*100).toFixed(1)) : 0
+    }));
+
+    document.getElementById('stat-attendance').textContent    = att ? att.toFixed(1)+'%' : '—';
+    document.getElementById('stat-avg-marks').textContent     = avgMarks ? avgMarks.toFixed(1)+'%' : '—';
+    document.getElementById('stat-risk-score').textContent    = risk || '—';
+    document.getElementById('stat-pending-tasks').textContent = pending;
+
+    // Risk display
+    const riskColors = {LOW:'#10B981',MEDIUM:'#F59E0B',HIGH:'#EF4444'};
+    const riskLabels  = {LOW:'Low Risk — You are doing great!',MEDIUM:'Moderate Risk — Keep it up!',HIGH:'High Risk — Please seek counselling'};
+    document.getElementById('risk-level-display').textContent = risk || '—';
+    document.getElementById('risk-level-display').style.color = riskColors[riskLvl]||'#10B981';
+    document.getElementById('risk-label').textContent         = riskLabels[riskLvl]||'';
+    document.getElementById('risk-bar').style.width           = (risk||0)+'%';
+
+    renderMarksTrend(mTrend);
+    renderSubjectAttendance(subjects);
+    renderTasksList(tasks);
+  } catch(e) { showToast('Dashboard load error: '+e.message,'error'); }
+}
+
+function renderMarksTrend(trend) {
+  const ctx = document.getElementById('marks-trend-chart');
+  if (!ctx) return;
+  if (_marksTrend) _marksTrend.destroy();
+  // Filter out records with no/blank/unknown subject
+  const SKIP = new Set(['', 'unknown', 'n/a', '-']);
+  const clean = (trend||[]).filter(t => {
+    const s = (t.subject||t.label||t.name||'').trim().toLowerCase();
+    return s && !SKIP.has(s);
+  });
+  const labels = clean.length ? clean.map(t=>t.subject||t.label||t.name||'') : ['Subject 1','Subject 2','Subject 3'];
+  const data   = clean.length ? clean.map(t=>t.score||t.marks||t.value||0)   : [0,0,0];
+  _marksTrend = new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Marks %', data,
+        backgroundColor:data.map(v=>v>=75?'rgba(16,185,129,0.7)':v>=50?'rgba(245,158,11,0.7)':'rgba(239,68,68,0.7)'),
+        borderRadius:8, borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'var(--divider)'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderSubjectAttendance(subjects) {
+  const ctx = document.getElementById('subject-att-chart');
+  if (!ctx) return;
+  if (_subjAtt) _subjAtt.destroy();
+  // Filter out records with no/blank/unknown subject
+  const SKIP = new Set(['', 'unknown', 'n/a', '-']);
+  const clean = (subjects||[]).filter(s => {
+    const n = (s.subject||s.name||'').trim().toLowerCase();
+    return n && !SKIP.has(n);
+  });
+  const labels = clean.length ? clean.map(s=>s.subject||s.name||'') : ['S1','S2','S3'];
+  const data   = clean.length ? clean.map(s=>s.pct||s.attendance||0) : [0,0,0];
+  _subjAtt = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'Attendance %', data,
+        borderColor:'#60A5FA', backgroundColor:'rgba(96,165,250,0.10)',
+        borderWidth:2.5, fill:true, tension:0.4, pointRadius:5, pointBackgroundColor:'#60A5FA'
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'var(--divider)'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderTasksList(tasks) {
+  const el = document.getElementById('tasks-list');
+  if (!tasks.length) {
+    el.innerHTML='<div class="empty-state"><i class="fas fa-check-circle"></i><p>No pending tasks</p></div>';
+    return;
+  }
+  el.innerHTML = tasks.slice(0,8).map(t=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--divider)">
+      <div style="width:34px;height:34px;border-radius:9px;background:${t.type==='quiz'?'rgba(123,47,255,0.12)':'rgba(96,165,250,0.12)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fas ${t.type==='quiz'?'fa-clipboard-list':'fa-tasks'}" style="color:${t.type==='quiz'?'#7B2FFF':'#60A5FA'};font-size:14px"></i>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.title||'Task'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${t.subject||''} · Due: ${t.dueDate||'—'}</div>
+      </div>
+      <span class="badge badge-${t.urgent?'high':'medium'}">${t.urgent?'Urgent':'Soon'}</span>
+    </div>`).join('');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}Notes — EduPulse{% endblock %}
+{% block page_title %}Study Notes{% endblock %}
+{% block content %}
+<div class="page-title">Study Notes</div>
+<div class="page-subtitle">Lecture notes and study materials from your teachers</div>
+<div class="glass-card" style="padding:24px;margin-top:8px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="section-title" style="margin:0">All Notes</div>
+    <input id="notes-search" class="form-input" placeholder="🔍  Search title or subject…"
+      style="width:240px;padding:8px 12px;font-size:13px" oninput="filterNotes(this.value)">
+  </div>
+  <div id="notes-table"><div class="skeleton" style="height:200px"></div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let _allNotes = [];
+
+function renderNotesTable(notes) {
+  const el = document.getElementById('notes-table');
+  if (!notes.length) { el.innerHTML='<div class="empty-state"><i class="fas fa-sticky-note"></i><p>No notes found</p></div>'; return; }
+  el.innerHTML = `
+    <div style="border-radius:14px;overflow:hidden;border:1px solid var(--card-border)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:rgba(123,47,255,0.12);border-bottom:2px solid var(--card-border)">
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center;width:40px">#</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Title</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Subject</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Date</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Teacher</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Download</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${notes.map((n, i) => {
+            const subj    = n.subject || n.subjectId || '—';
+            const teacher = n.teacherName || '—';
+            const bgStripe = i%2===0?'transparent':'rgba(255,255,255,0.02)';
+            return `<tr style="background:${bgStripe};transition:background 0.15s"
+              onmouseover="this.style.background='rgba(123,47,255,0.07)'"
+              onmouseout="this.style.background='${bgStripe}'"
+              onclick="trackOpen('${n.id}')">
+              <td style="padding:11px 14px;text-align:center;color:var(--text-muted);font-size:12px">${i+1}</td>
+              <td style="padding:11px 14px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#7B2FFF,#A78BFA);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <i class="fas fa-file-alt" style="color:white;font-size:13px"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight:600;font-size:13px">${n.title||'Untitled'}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${n.description?.slice(0,60)||''}</div>
+                  </div>
+                </div>
+              </td>
+              <td style="padding:11px 14px;font-size:13px">
+                <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(96,165,250,0.12);color:#60A5FA">${subj}</span>
+              </td>
+              <td style="padding:11px 14px;font-size:13px;color:var(--text-secondary)">${n.date||'—'}</td>
+              <td style="padding:11px 14px;font-size:13px;color:var(--text-secondary)">${teacher}</td>
+              <td style="padding:11px 14px;text-align:center">
+                ${n.fileUrl
+                  ? `<a href="${n.fileUrl}" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-download"></i></a>`
+                  : '<span style="color:var(--text-muted);font-size:12px">—</span>'}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function onPageReady(){
+  const d    = await apiCall('/api/student/notes');
+  _allNotes  = d.notes || [];
+  if (!_allNotes.length) {
+    document.getElementById('notes-table').innerHTML='<div class="empty-state"><i class="fas fa-sticky-note"></i><p>No notes uploaded yet</p></div>';
+    return;
+  }
+  renderNotesTable(_allNotes);
+}
+
+function filterNotes(term) {
+  const t = term.toLowerCase();
+  renderNotesTable(_allNotes.filter(n =>
+    (n.title||'').toLowerCase().includes(t) ||
+    (n.subject||n.subjectId||'').toLowerCase().includes(t) ||
+    (n.teacherName||'').toLowerCase().includes(t)
+  ));
+}
+
+function trackOpen(noteId){ apiCall(`/api/student/notes/${noteId}/open`,'POST',{duration:0}).catch(()=>{}); }
+</script>
+{% endblock %}

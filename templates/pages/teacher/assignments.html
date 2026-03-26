@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+{% block title %}Assignments — EduPulse{% endblock %}
+{% block page_title %}Assignments{% endblock %}
+{% block extra_css %}
+<style>
+.asgn-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.asgn-title { font-size: 22px; font-weight: 800; color: var(--text-primary); }
+
+.asgn-table { width: 100%; border-collapse: collapse; }
+.asgn-table thead tr {
+    background: rgba(123,47,255,0.08);
+    border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.asgn-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.asgn-table tbody tr {
+    border-bottom: 1px solid rgba(123,47,255,0.08);
+    transition: background 0.15s;
+}
+.asgn-table tbody tr:last-child { border-bottom: none; }
+.asgn-table tbody tr:hover { background: rgba(123,47,255,0.05); }
+.asgn-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); vertical-align: middle; }
+
+.subj-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(123,47,255,0.12);
+    color: #A78BFA;
+}
+.due-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(245,158,11,0.12);
+    color: #F59E0B;
+}
+.marks-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(16,185,129,0.10);
+    color: #10B981;
+}
+.btn-subs {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 10px; border: none; cursor: pointer;
+    background: rgba(123,47,255,0.12); color: #A78BFA;
+    font-size: 12px; font-weight: 700; transition: background 0.2s;
+}
+.btn-subs:hover { background: rgba(123,47,255,0.25); }
+
+/* Submissions table */
+.subs-table { width: 100%; border-collapse: collapse; }
+.subs-table th { padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.subs-table td { padding: 12px 12px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+.subs-table tr:last-child td { border-bottom: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="asgn-header">
+    <div class="asgn-title">My Assignments</div>
+    <button class="btn btn-primary" onclick="openCreateModal()">
+        <i class="fas fa-plus"></i> Create Assignment
+    </button>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+        <table class="asgn-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Class</th>
+                    <th>Subject</th>
+                    <th>Due Date</th>
+                    <th>Max Marks</th>
+                    <th>Submissions</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="asgn-tbody">
+                <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">
+                    <i class="fas fa-spinner fa-spin" style="font-size:22px;display:block;margin-bottom:10px"></i>Loading…
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create Assignment Modal -->
+<div id="create-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeModal()">
+  <div class="glass-card" style="padding:28px;max-width:500px;width:100%;margin:20px;position:relative">
+    <button onclick="closeModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:17px;font-weight:800;margin-bottom:20px"><i class="fas fa-tasks" style="color:#7B2FFF;margin-right:8px"></i>Create Assignment</div>
+    <form onsubmit="createAssignment(event)">
+      <div class="form-group"><label class="form-label">Title</label><input id="a-title" class="form-input" required placeholder="e.g. Lab Report 1"></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea id="a-desc" class="form-input" placeholder="Assignment instructions…" style="min-height:70px"></textarea></div>
+      <div class="grid-2" style="gap:12px">
+        <div class="form-group"><label class="form-label">Class</label><select id="a-class" class="form-input" required><option value="">Select class</option></select></div>
+        <div class="form-group"><label class="form-label">Max Marks</label><input id="a-max" type="number" class="form-input" value="20" min="1"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Due Date</label><input id="a-due" type="date" class="form-input" required></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px"><i class="fas fa-plus"></i> Create</button>
+    </form>
+  </div>
+</div>
+
+<!-- Submissions Modal -->
+<div id="subs-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeSubs()">
+  <div class="glass-card" style="padding:28px;max-width:660px;width:100%;margin:20px;position:relative;max-height:85vh;overflow-y:auto">
+    <button onclick="closeSubs()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:17px;font-weight:800;margin-bottom:16px"><i class="fas fa-inbox" style="color:#7B2FFF;margin-right:8px"></i>Submissions</div>
+    <div id="subs-content"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _classes = [];
+var _mySubject = '';
+
+async function onPageReady() {
+    const d = await apiCall('/api/teacher/classes');
+    _classes    = d.classes || [];
+    _mySubject  = (_classes[0] && _classes[0].mySubject) || '';
+
+    const classSelect = document.getElementById('a-class');
+    _classes.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.name || c.classId;
+        classSelect.appendChild(o);
+    });
+
+    /* Default due date = tomorrow */
+    const tm = new Date(); tm.setDate(tm.getDate()+1);
+    document.getElementById('a-due').value = tm.toISOString().slice(0,10);
+
+    loadAssignments();
+}
+
+async function loadAssignments() {
+    const d    = await apiCall('/api/teacher/assignments');
+    const asms = d.assignments || [];
+    const tbody = document.getElementById('asgn-tbody');
+
+    if (!asms.length) {
+        tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+            <i class="fas fa-tasks"></i><p>No assignments created yet</p></div></td></tr>`;
+        return;
+    }
+
+    const classMap = {};
+    _classes.forEach(c => { classMap[c.id] = c.name || c.classId; });
+
+    tbody.innerHTML = asms.map((a, i) => {
+        const aid = a.assignmentId || a.id;
+        const due = a.dueDate || '—';
+        const subsCount = a.submissionsCount ?? a.submissions ?? '—';
+        return `
+        <tr>
+            <td style="color:var(--text-muted);font-size:12px;font-weight:600">${i+1}</td>
+            <td style="font-weight:700;font-size:13px">${a.title || '—'}</td>
+            <td style="font-size:12px">${classMap[a.classId] || a.classId || '—'}</td>
+            <td><span class="subj-badge">${a.subjectId || _mySubject || '—'}</span></td>
+            <td><span class="due-badge"><i class="fas fa-calendar-alt" style="margin-right:4px"></i>${due}</span></td>
+            <td><span class="marks-badge">${a.maxMarks ?? '—'}</span></td>
+            <td style="font-size:12px;color:var(--text-muted)">${subsCount}</td>
+            <td>
+                <button class="btn-subs" onclick="viewSubs('${aid}')">
+                    <i class="fas fa-eye"></i> Submissions
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function createAssignment(e) {
+    e.preventDefault();
+    const body = {
+        title      : document.getElementById('a-title').value,
+        description: document.getElementById('a-desc').value,
+        classId    : document.getElementById('a-class').value,
+        subjectId  : _mySubject,
+        dueDate    : document.getElementById('a-due').value,
+        maxMarks   : document.getElementById('a-max').value,
+    };
+    try {
+        showLoader('Creating…');
+        await apiCall('/api/teacher/assignments','POST',body);
+        showToast('Assignment created!','success');
+        closeModal(); loadAssignments();
+    } catch(e) { showToast(e.message,'error'); }
+    finally { hideLoader(); }
+}
+
+async function viewSubs(aid) {
+    const d    = await apiCall(`/api/teacher/assignments/${aid}/submissions`);
+    const subs = d.submissions || [];
+    document.getElementById('subs-content').innerHTML = subs.length
+        ? `<table class="subs-table">
+             <thead><tr><th>#</th><th>Student</th><th>Drive Link</th><th>Submitted</th><th>Marks</th><th>Grade</th></tr></thead>
+             <tbody>${subs.map((s,i) => {
+               const link = s.driveLink || s.fileUrl || '';
+               const linkBtn = link
+                 ? `<a href="${link}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;background:rgba(66,133,244,0.12);color:#4285F4;font-size:12px;font-weight:700;text-decoration:none;border:1px solid rgba(66,133,244,0.25)">
+                      <i class="fab fa-google-drive"></i> Open
+                    </a>`
+                 : `<span style="color:var(--text-muted);font-size:12px">No link</span>`;
+               return `
+               <tr>
+                 <td style="color:var(--text-muted);font-size:12px">${i+1}</td>
+                 <td style="font-weight:600">${s.studentName||'—'}</td>
+                 <td>${linkBtn}</td>
+                 <td><span class="subj-badge">${s.status||'submitted'}</span></td>
+                 <td style="font-weight:700;color:${s.marks!=null?'#7B2FFF':'var(--text-muted)'}">${s.marks!=null?s.marks:'—'}</td>
+                 <td><button onclick="grade('${s.id||s.submissionId}','${aid}')" class="btn btn-sm btn-primary">
+                     <i class="fas fa-star"></i> Grade</button></td>
+               </tr>`;
+             }).join('')}
+             </tbody></table>`
+        : `<div class="empty-state"><i class="fas fa-inbox"></i><p>No submissions yet</p></div>`;
+    document.getElementById('subs-modal').style.display = 'flex';
+}
+
+
+async function grade(subId, aid) {
+    const marks    = prompt('Enter marks:');
+    const feedback = prompt('Feedback (optional):');
+    if (marks === null) return;
+    try {
+        await apiCall(`/api/teacher/assignments/${aid}/submissions/${subId}/grade`,'POST',
+                      {marks: parseFloat(marks), feedback: feedback||''});
+        showToast('Graded!','success'); viewSubs(aid);
+    } catch(e) { showToast(e.message,'error'); }
+}
+
+function openCreateModal() { document.getElementById('create-modal').style.display = 'flex'; }
+function closeModal()       { document.getElementById('create-modal').style.display = 'none'; }
+function closeSubs()        { document.getElementById('subs-modal').style.display  = 'none'; }
+</script>
+{% endblock %}

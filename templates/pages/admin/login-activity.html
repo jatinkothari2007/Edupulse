@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+{% block title %}Login Activity — EduPulse{% endblock %}
+{% block page_title %}Login Activity{% endblock %}
+{% block extra_css %}
+<style>
+.la-table { width:100%; border-collapse:collapse; }
+.la-table thead tr {
+  background: rgba(123,47,255,0.08);
+  border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.la-table thead th {
+  padding: 12px 18px; text-align:left; font-size:11px; font-weight:700;
+  letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); white-space:nowrap;
+}
+.la-table tbody tr { border-bottom:1px solid rgba(123,47,255,0.07); transition:background 0.15s; }
+.la-table tbody tr:last-child { border-bottom:none; }
+.la-table tbody tr:hover      { background:rgba(123,47,255,0.04); }
+.la-table tbody td            { padding:13px 18px; font-size:13px; vertical-align:middle; }
+.id-chip {
+  font-family:monospace; font-size:11px; font-weight:700;
+  background:rgba(123,47,255,0.10); color:#A78BFA;
+  padding:2px 8px; border-radius:20px;
+}
+.role-pill  { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.cnt-badge  { display:inline-flex; align-items:center; min-width:32px; height:24px; padding:0 8px; border-radius:20px; font-size:12px; font-weight:800; }
+.filter-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.la-input {
+  flex:1; min-width:200px; padding:8px 14px; border-radius:12px;
+  border:1px solid rgba(123,47,255,0.2); background:rgba(15,10,30,0.85);
+  color:var(--text-primary); font-size:13px;
+}
+.la-input::placeholder { color:var(--text-muted); }
+.la-input:focus { outline:none; border-color:#7B2FFF; box-shadow:0 0 0 3px rgba(123,47,255,0.12); }
+.la-input option { background:#1a1035; color:#e2e0f0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Login Activity</div>
+    <div class="page-subtitle">Track login times and access frequency for every user</div>
+  </div>
+  <button class="btn btn-ghost" onclick="laRefresh()"><i class="fas fa-sync"></i> Refresh</button>
+</div>
+
+<div class="stats-grid" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)"><i class="fas fa-users" style="color:#7B2FFF"></i></div>
+    <div class="stat-info"><div class="stat-value" id="la-total">—</div><div class="stat-label">Total Users</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-circle" style="color:#10B981"></i></div>
+    <div class="stat-info"><div class="stat-value" id="la-today">—</div><div class="stat-label">Active Today</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-sign-in-alt" style="color:#F59E0B"></i></div>
+    <div class="stat-info"><div class="stat-value" id="la-logins">—</div><div class="stat-label">Total Logins</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)"><i class="fas fa-user-slash" style="color:#EF4444"></i></div>
+    <div class="stat-info"><div class="stat-value" id="la-never">—</div><div class="stat-label">Never Logged In</div></div>
+  </div>
+</div>
+
+<div class="filter-bar" style="margin-bottom:16px">
+  <input id="la-search" class="la-input" placeholder="Search by name or ID…" oninput="laFilter()">
+  <select id="la-role" class="la-input" style="flex:0;min-width:160px" onchange="laFilter()">
+    <option value="">All Roles</option>
+    <option value="admin">Admin</option>
+    <option value="faculty_advisor">Faculty Advisor</option>
+    <option value="subject_teacher">Subject Teacher</option>
+    <option value="counsellor">Counsellor</option>
+    <option value="student">Student</option>
+  </select>
+</div>
+
+<div class="glass-card" style="padding:0;overflow:hidden">
+  <div style="overflow-x:auto">
+    <table class="la-table">
+      <thead><tr>
+        <th>#</th><th>User</th><th>Role</th>
+        <th>Login Count</th><th>Last Login</th><th>Last Seen</th>
+      </tr></thead>
+      <tbody id="la-tbody">
+        <tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text-muted)">
+          <i class="fas fa-spinner fa-spin" style="font-size:20px;display:block;margin-bottom:10px"></i>Loading…
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ── Loaded once per session, refreshed on demand ── */
+var _laData  = [];
+var _laCache = 'ep_la_v1';
+
+var LA_ROLES = {
+  admin           : { label:'Admin',          color:'#7B2FFF' },
+  faculty_advisor : { label:'Faculty Advisor', color:'#60A5FA' },
+  subject_teacher : { label:'Subject Teacher', color:'#10B981' },
+  counsellor      : { label:'Counsellor',      color:'#F59E0B' },
+  student         : { label:'Student',         color:'#A78BFA' },
+};
+
+/* Called by base.html on page load */
+async function onPageReady() {
+  /* Return cached data immediately */
+  try {
+    var c = sessionStorage.getItem(_laCache);
+    if (c) {
+      _laData = JSON.parse(c);
+      laStats();
+      laFilter();
+      return;
+    }
+  } catch(e) { sessionStorage.removeItem(_laCache); }
+  await laLoad();
+}
+
+/* ── Self-execute so data loads on SPA navigation too ── */
+waitForAuth().then(function(u) { if (u) onPageReady(); });
+
+/* Hoist for onclick handlers in new Function scope */
+window.onPageReady = onPageReady;
+window.laRefresh   = laRefresh;
+window.laFilter    = laFilter;
+
+function laRefresh() {
+  sessionStorage.removeItem(_laCache);
+  laLoad();
+}
+
+
+async function laLoad() {
+  document.getElementById('la-tbody').innerHTML =
+    '<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text-muted)">' +
+    '<i class="fas fa-spinner fa-spin" style="font-size:20px;display:block;margin-bottom:10px"></i>Loading…' +
+    '</td></tr>';
+
+  try {
+    /* Read users directly from Firestore client SDK — no backend, no auth middleware */
+    var snap = await window.db.collection('users').limit(300).get();
+    _laData = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      var ts = d.lastLogin || d.lastLoginAt || null;
+      var iso = null;
+      if (ts) {
+        try { iso = (ts.toDate ? ts.toDate() : new Date(ts)).toISOString(); } catch(e) { iso = null; }
+      }
+      _laData.push({
+        name      : d.name || '',
+        customId  : d.customId || '',
+        role      : d.role || '',
+        loginCount: parseInt(d.loginCount) || 0,
+        lastLogin : iso,
+      });
+    });
+    _laData.sort(function(a,b){ return (b.lastLogin||'').localeCompare(a.lastLogin||''); });
+    sessionStorage.setItem(_laCache, JSON.stringify(_laData));
+    laStats();
+    laFilter();
+  } catch(e) {
+    document.getElementById('la-tbody').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;padding:48px">' +
+      '<i class="fas fa-exclamation-circle" style="font-size:24px;color:#EF4444;display:block;margin-bottom:12px"></i>' +
+      '<div style="color:#EF4444;font-weight:600;margin-bottom:14px">' + e.message + '</div>' +
+      '<button class="btn btn-primary" onclick="laRefresh()"><i class="fas fa-redo"></i> Retry</button>' +
+      '</td></tr>';
+    showToast(e.message, 'error');
+  }
+}
+
+function laStats() {
+  var today  = new Date().toDateString();
+  var active = _laData.filter(function(u) {
+    return u.lastLogin && new Date(u.lastLogin).toDateString() === today;
+  }).length;
+  var logins = _laData.reduce(function(s,u){ return s + (u.loginCount||0); }, 0);
+  var never  = _laData.filter(function(u){ return !u.lastLogin && !u.loginCount; }).length;
+  document.getElementById('la-total').textContent  = _laData.length;
+  document.getElementById('la-today').textContent  = active;
+  document.getElementById('la-logins').textContent = logins;
+  document.getElementById('la-never').textContent  = never;
+}
+
+function laFilter() {
+  var q    = (document.getElementById('la-search').value || '').toLowerCase();
+  var role = document.getElementById('la-role').value;
+  var list = _laData.filter(function(u) {
+    var mq = !q || (u.name||'').toLowerCase().indexOf(q)>=0 || (u.customId||'').toLowerCase().indexOf(q)>=0;
+    var mr = !role || u.role === role;
+    return mq && mr;
+  });
+  laRender(list);
+}
+
+function laTimeAgo(iso) {
+  if (!iso) return '—';
+  var d = Date.now() - new Date(iso).getTime();
+  if (isNaN(d))   return '—';
+  var m = Math.floor(d/60000), h = Math.floor(d/3600000), dy = Math.floor(d/86400000);
+  if (m  < 1)  return 'Just now';
+  if (m  < 60) return m  + 'm ago';
+  if (h  < 24) return h  + 'h ago';
+  if (dy < 7)  return dy + 'd ago';
+  return new Date(iso).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function laFmt(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}); }
+  catch(e) { return iso.slice(0,10); }
+}
+
+function laRender(list) {
+  var el = document.getElementById('la-tbody');
+  if (!list.length) {
+    el.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:48px"><i class="fas fa-clock"></i><p>No users found</p></div></td></tr>';
+    return;
+  }
+  el.innerHTML = list.map(function(u, i) {
+    var ri  = LA_ROLES[u.role] || { label:u.role||'—', color:'#6B7280' };
+    var cnt = u.loginCount || 0;
+    var cc  = cnt===0 ? '#6B7280' : cnt<5 ? '#F59E0B' : '#10B981';
+    var dot = u.lastLogin ? '<i class="fas fa-circle" style="font-size:7px;margin-right:4px"></i>' : '';
+    return '<tr>' +
+      '<td style="color:var(--text-muted);font-size:12px;font-weight:600">' + (i+1) + '</td>' +
+      '<td><div style="font-weight:700;font-size:13px">' + (u.name||'—') + '</div>' +
+        '<span class="id-chip" style="margin-top:3px;display:inline-block">' + (u.customId||'—') + '</span></td>' +
+      '<td><span class="role-pill" style="background:' + ri.color + '15;color:' + ri.color + '">' + ri.label + '</span></td>' +
+      '<td><span class="cnt-badge" style="background:' + cc + '15;color:' + cc + '">' +
+        '<i class="fas fa-sign-in-alt" style="font-size:10px;margin-right:4px"></i>' + cnt + '</span></td>' +
+      '<td><div style="font-size:13px">' + laFmt(u.lastLogin) + '</div></td>' +
+      '<td><div style="font-size:12px;color:' + (u.lastLogin?'#10B981':'var(--text-muted)') + '">' +
+        dot + laTimeAgo(u.lastLogin) + '</div></td>' +
+      '</tr>';
+  }).join('');
+}
+</script>
+{% endblock %}

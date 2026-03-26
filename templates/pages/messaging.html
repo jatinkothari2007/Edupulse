@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block title %}Messaging — EduPulse{% endblock %}
+{% block page_title %}Messages{% endblock %}
+{% block extra_css %}
+<style>
+.chat-layout{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 140px);gap:0;background:var(--card-bg);border:1px solid var(--card-border);border-radius:20px;overflow:hidden}
+.conv-list{border-right:1px solid var(--divider);overflow-y:auto}
+.conv-item{padding:14px 16px;border-bottom:1px solid var(--divider);cursor:pointer;transition:background 0.15s}
+.conv-item:hover,.conv-item.active{background:rgba(123,47,255,0.08)}
+.chat-area{display:flex;flex-direction:column}
+.chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.msg-bubble{max-width:68%;padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.5;word-break:break-word}
+.msg-mine{align-self:flex-end;background:linear-gradient(135deg,#7B2FFF,#A78BFA);color:white;border-bottom-right-radius:4px}
+.msg-other{align-self:flex-start;background:var(--glass-bg);border:1px solid var(--glass-border);border-bottom-left-radius:4px}
+.chat-input-area{padding:12px 16px;border-top:1px solid var(--divider);display:flex;gap:10px;align-items:center}
+.no-conv{display:flex;align-items:center;justify-content:center;flex:1;flex-direction:column;gap:12px;color:var(--text-muted);font-size:14px}
+@media(max-width:640px){.chat-layout{grid-template-columns:1fr}.conv-list{display:none}.conv-list.show{display:block}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="chat-layout">
+  <!-- Left: conversation list -->
+  <div class="conv-list" id="conv-list">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--divider);display:flex;gap:8px">
+      <input id="contact-search" class="form-input" placeholder="Find contact…" style="padding:8px 12px;font-size:13px" oninput="filterContacts()">
+      <button class="btn btn-sm btn-primary" onclick="openNewConvModal()" title="New Message"><i class="fas fa-edit"></i></button>
+    </div>
+    <div id="conv-items"><div class="skeleton" style="height:72px;margin:8px"></div></div>
+  </div>
+
+  <!-- Right: active chat -->
+  <div class="chat-area" id="chat-area">
+    <div class="no-conv" id="no-conv-placeholder">
+      <i class="fas fa-comments" style="font-size:40px;color:var(--purple-primary);opacity:0.4"></i>
+      <span>Select a conversation to start messaging</span>
+    </div>
+    <div id="active-chat" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div id="chat-header" style="padding:14px 16px;border-bottom:1px solid var(--divider);font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px">
+        <div id="chat-avatar" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7B2FFF,#A78BFA);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px"></div>
+        <div><div id="chat-name"></div><div id="chat-role" style="font-size:11px;font-weight:400;color:var(--text-muted)"></div></div>
+      </div>
+      <div class="chat-msgs" id="chat-msgs"></div>
+      <div class="chat-input-area">
+        <input id="msg-input" class="form-input" placeholder="Type a message… (AES encrypted 🔒)" style="flex:1;padding:10px 14px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}">
+        <button class="btn btn-primary" onclick="sendMsg()" style="padding:10px 16px"><i class="fas fa-paper-plane"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Conv Modal -->
+<div id="new-conv-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)closeNewConv()">
+  <div class="glass-card" style="padding:28px;max-width:420px;width:100%;margin:20px;position:relative">
+    <button onclick="closeNewConv()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:20px;color:var(--text-muted);cursor:pointer">×</button>
+    <div class="section-title" style="margin-bottom:16px">New Message</div>
+    <div id="contact-list"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const AES_KEY = 'EduPulse2026SecureKey';
+let _convs = [], _contacts = [], _activeConvId = null, _uid = null;
+let _msgsListener = null;
+
+function _encrypt(text){ return CryptoJS.AES.encrypt(text, AES_KEY).toString(); }
+function _decrypt(cipher){ try{ return CryptoJS.AES.decrypt(cipher,AES_KEY).toString(CryptoJS.enc.Utf8)||'[encrypted]';}catch(_){return '[encrypted]';} }
+
+async function onPageReady(user) {
+  _uid = user.uid;
+  // Load conversations realtime — no orderBy to avoid composite index requirement
+  window.db.collection('conversations').where('participants','array-contains',_uid)
+    .onSnapshot(snap=>{
+      _convs=[];
+      snap.forEach(d=>{
+        const data = d.data();
+        // Convert Firestore timestamp for sorting
+        const ts = data.lastTimestamp;
+        data._ts = ts && ts.toMillis ? ts.toMillis() : 0;
+        _convs.push({id:d.id,...data});
+      });
+      // Sort newest first in JS
+      _convs.sort((a,b)=>b._ts-a._ts);
+      renderConvList();
+    });
+  // Load contacts for new conv
+  const cdata = await apiCall('/api/messaging/contacts');
+  _contacts = cdata.contacts || [];
+}
+
+function renderConvList(filterTerm='') {
+  const el = document.getElementById('conv-items');
+  const term = filterTerm.toLowerCase();
+  let list = _convs.filter(c=>!c.isAI);
+  if(term) list = list.filter(c=>{
+    // Get the other person's name
+    const otherId = c.participants?.find(p=>p!==_uid)||'';
+    const otherName = (c.participantNames?.[otherId]||'').toLowerCase();
+    return otherName.includes(term);
+  });
+  if (!list.length){
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px">${term?'No matching contacts':'No conversations yet'}</div>`;
+    return;
+  }
+  el.innerHTML = list.map(c=>{
+    const otherId = c.participants?.find(p=>p!==_uid)||c.participants?.[0]||'';
+    const other = c.participantNames?.[otherId] || 'EduPulse';
+    const init  = other[0]?.toUpperCase()||'?';
+    return `<div class="conv-item ${_activeConvId===c.id?'active':''}" onclick="openConv('${c.id}','${other.replace(/'/g,"\\'")}')"> 
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#7B2FFF,#A78BFA);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0">${init}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${other}</div>
+          <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.lastMessage||'—'}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function openConv(convId, otherName) {
+  _activeConvId = convId;
+  renderConvList();
+  if (_msgsListener){ _msgsListener(); _msgsListener=null; }
+  document.getElementById('no-conv-placeholder').style.display='none';
+  const activeChat = document.getElementById('active-chat');
+  activeChat.style.display='flex';
+  document.getElementById('chat-name').textContent = otherName;
+  document.getElementById('chat-avatar').textContent = otherName[0]?.toUpperCase()||'?';
+  const msgsEl = document.getElementById('chat-msgs');
+  msgsEl.innerHTML='';
+  _msgsListener = window.db.collection('conversations').doc(convId)
+    .collection('messages').orderBy('timestamp','asc').limit(200)
+    .onSnapshot(snap=>{
+      msgsEl.innerHTML='';
+      snap.forEach(d=>{
+        const m=d.data(); const isMine=m.senderId===_uid;
+        const text= m.encrypted ? _decrypt(m.text) : m.text;
+        const div = document.createElement('div');
+        div.className=`msg-bubble ${isMine?'msg-mine':'msg-other'}`;
+        div.innerHTML=`<div>${text}</div><div style="font-size:10px;opacity:0.6;margin-top:4px;text-align:right">${m.senderName||''}</div>`;
+        msgsEl.appendChild(div);
+      });
+      msgsEl.scrollTop=msgsEl.scrollHeight;
+    });
+}
+
+async function sendMsg() {
+  const input = document.getElementById('msg-input');
+  const text  = input.value.trim();
+  if (!text || !_activeConvId) return;
+  const encrypted = _encrypt(text);
+  input.value='';
+  try { await apiCall(`/api/messaging/conversations/${_activeConvId}/messages`,'POST',{text:encrypted}); }
+  catch(e){ showToast('Send failed: '+e.message,'error'); }
+}
+
+function openNewConvModal() {
+  const list = document.getElementById('contact-list');
+  if(!_contacts.length){ list.innerHTML='<div style="color:var(--text-muted);text-align:center;padding:16px">No contacts available</div>'; }
+  else list.innerHTML = _contacts.map(c=>`
+    <div onclick="startConvWith('${c.uid}','${c.name.replace(/'/g,"\\'")}','${c.role}')" style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(123,47,255,0.08)'" onmouseleave="this.style.background='transparent'">
+      <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7B2FFF,#A78BFA);display:flex;align-items:center;justify-content:center;color:white;font-weight:700">${c.name[0]?.toUpperCase()}</div>
+      <div><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11px;color:var(--text-muted)">${c.role?.replace(/_/g,' ')}</div></div>
+    </div>`).join('');
+  document.getElementById('new-conv-modal').style.display='flex';
+}
+
+async function startConvWith(uid, name, role) {
+  closeNewConv();
+  try {
+    const r = await apiCall('/api/messaging/conversations','POST',{targetUid:uid});
+    openConv(r.conversationId, name);
+  } catch(e){ showToast(e.message,'error'); }
+}
+function closeNewConv(){ document.getElementById('new-conv-modal').style.display='none'; }
+function filterContacts(){
+  const term = document.getElementById('contact-search').value.toLowerCase();
+  renderConvList(term);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard — EduPulse{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+{% block page_subtitle %}Manage users, monitor risks, view system activity{% endblock %}
+
+{% block content %}
+<!-- Welcome bar -->
+<div class="flex-between mb-24">
+  <div>
+    <h2 class="section-title">Welcome back, <span id="admin-name">Admin</span> 👋</h2>
+    <p class="section-subtitle">Here's what's happening across the system today.</p>
+  </div>
+  <div class="flex gap-8">
+    <a href="/pages/admin/users" class="btn btn-primary">
+      <i class="fas fa-user-plus"></i> Create User
+    </a>
+    <button class="btn btn-ghost" onclick="recalcAll()">
+      <i class="fas fa-sync"></i> Recalc Risks
+    </button>
+  </div>
+</div>
+
+<!-- 4 Stat Cards -->
+<div class="stats-grid" id="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)">
+      <i class="fas fa-users" style="color:#7B2FFF"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-total-users"><div class="skeleton" style="height:28px;width:48px"></div></div>
+      <div class="stat-label">Total Users</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(96,165,250,0.12)">
+      <i class="fas fa-school" style="color:#60A5FA"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-students"><div class="skeleton" style="height:28px;width:40px"></div></div>
+      <div class="stat-label">Students</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)">
+      <i class="fas fa-exclamation-triangle" style="color:#EF4444"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-high-risk"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">High Risk</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)">
+      <i class="fas fa-chalkboard-teacher" style="color:#10B981"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-teachers"><div class="skeleton" style="height:28px;width:40px"></div></div>
+      <div class="stat-label">Teachers</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="two-col">
+  <!-- Risk Distribution -->
+  <div class="glass-card">
+    <div class="card-header">
+      <div>
+        <p class="card-title">Risk Distribution</p>
+        <p class="card-subtitle">All students by risk level</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container" style="max-height:260px">
+        <canvas id="risk-chart"></canvas>
+      </div>
+      <!-- Risk counts below chart -->
+      <div id="risk-summary" style="display:flex;justify-content:center;gap:24px;margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- Users by Role -->
+  <div class="glass-card">
+    <div class="card-header">
+      <div>
+        <p class="card-title">Users by Role</p>
+        <p class="card-subtitle">Role distribution breakdown</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container" style="max-height:260px">
+        <canvas id="role-chart"></canvas>
+      </div>
+      <!-- Role legend row -->
+      <div id="role-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions + Recent Activity -->
+<div class="two-col-wide">
+  <div class="glass-card full-width">
+    <div class="card-header">
+      <div>
+        <p class="card-title">Recent Activity</p>
+        <p class="card-subtitle">Last 20 system events</p>
+      </div>
+    </div>
+    <div class="card-body" style="padding-top:0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>User</th><th>Role</th><th>Action</th></tr></thead>
+          <tbody id="activity-body">
+            <tr><td colspan="4"><div class="skeleton skeleton-row"></div></td></tr>
+            <tr><td colspan="4"><div class="skeleton skeleton-row"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass-card">
+    <div class="card-header"><p class="card-title">Quick Actions</p></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+      <a href="/pages/admin/users"     class="btn btn-primary">  <i class="fas fa-user-plus"></i>   Manage Users</a>
+      <button class="btn btn-secondary" onclick="openReport('/api/reports/class/CLS0001')">
+        <i class="fas fa-file-pdf"></i> Export Report
+      </button>
+      <button class="btn btn-ghost" onclick="recalcAll()">
+        <i class="fas fa-sync"></i> Recalculate Risks
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _riskChart = null, _roleChart = null;
+
+waitForAuth().then(user => {
+  if (!user) { window.location.href='/'; return; }
+  document.getElementById('admin-name').textContent = (user.name||'Admin').split(' ')[0];
+  listenNotifications(user.uid);
+  loadAdminDashboard();
+});
+
+async function loadAdminDashboard() {
+  try {
+    const d = await cachedApiCall('/api/admin/analytics', 'GET', null, 90);
+    const counts  = d.userCounts  || {};
+    const risk    = d.riskDist    || {};
+    const acts    = d.recentActivity || [];
+
+    document.getElementById('stat-total-users').textContent = Object.values(counts).reduce((a,b)=>a+b,0);
+    document.getElementById('stat-students').textContent    = counts.student || 0;
+    document.getElementById('stat-high-risk').textContent   = risk.HIGH  || 0;
+    document.getElementById('stat-teachers').textContent    = counts.subject_teacher || 0;
+
+    renderRiskChart(risk);
+    renderRoleChart(counts);
+    renderActivity(acts);
+  } catch(e) { showToast('Failed to load dashboard: '+e.message,'error'); }
+}
+
+function renderRiskChart(risk) {
+  const ctx = document.getElementById('risk-chart');
+  if (!ctx) return;
+  if (_riskChart) _riskChart.destroy();
+
+  const vals  = [risk.LOW||0, risk.MEDIUM||0, risk.HIGH||0];
+  const total = vals.reduce((a,b)=>a+b,0);
+  const pct   = v => total ? Math.round(v/total*100) : 0;
+
+  _riskChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels:['Low','Medium','High'],
+      datasets:[{
+        data: vals,
+        backgroundColor:['rgba(16,185,129,0.80)','rgba(245,158,11,0.80)','rgba(239,68,68,0.80)'],
+        borderColor:['#10B981','#F59E0B','#EF4444'],
+        borderWidth:2, hoverOffset:10
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.7, cutout:'60%',
+      plugins:{
+        legend:{ position:'bottom', labels:{ padding:18, font:{size:12}, usePointStyle:true } },
+        tooltip:{
+          callbacks:{
+            label: ctx => {
+              const v = ctx.raw; const p = pct(v);
+              return '  ' + ctx.label + ': ' + v + ' students (' + p + '%)';
+            }
+          }
+        }
+      }
+    },
+    plugins: [{
+      id:'centreText',
+      beforeDraw(chart) {
+        const { width, height, ctx: c } = chart;
+        c.save();
+        c.font = 'bold 22px Inter, sans-serif';
+        c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-primary') || '#fff';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(total, width/2, height/2 - 10);
+        c.font = '11px Inter, sans-serif';
+        c.fillStyle = '#999';
+        c.fillText('Students', width/2, height/2 + 12);
+        c.restore();
+      }
+    }]
+  });
+
+  /* Risk summary pills below chart */
+  const colors = { Low:'#10B981', Medium:'#F59E0B', High:'#EF4444' };
+  document.getElementById('risk-summary').innerHTML =
+    [['Low',vals[0]],['Medium',vals[1]],['High',vals[2]]].map(([label,v]) =>
+      '<div style="text-align:center">' +
+      '<div style="font-size:18px;font-weight:800;color:' + colors[label] + '">' + v + '</div>' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + label + ' (' + pct(v) + '%)</div>' +
+      '</div>'
+    ).join('');
+}
+
+function renderRoleChart(counts) {
+  const ctx = document.getElementById('role-chart');
+  if (!ctx) return;
+  if (_roleChart) _roleChart.destroy();
+
+  const labels = ['Admin','Faculty','Teacher','Counsellor','Student'];
+  const keys   = ['admin','faculty_advisor','subject_teacher','counsellor','student'];
+  const clrs   = ['rgba(123,47,255,0.85)','rgba(45,212,191,0.85)','rgba(244,114,182,0.85)','rgba(96,165,250,0.85)','rgba(251,146,60,0.85)'];
+  const bclrs  = ['#7B2FFF','#2DD4BF','#F472B6','#60A5FA','#FB923C'];
+  const vals   = keys.map(k => counts[k]||0);
+  const total  = vals.reduce((a,b)=>a+b,0);
+  const pct    = v => total ? Math.round(v/total*100) : 0;
+
+  _roleChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Users',
+        data: vals,
+        backgroundColor: clrs,
+        borderColor: bclrs,
+        borderWidth: 1.5,
+        borderRadius: 10, borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.7,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label: ctx => '  ' + ctx.label + ': ' + ctx.raw + ' users (' + pct(ctx.raw) + ')'
+          }
+        },
+        datalabels: false   /* no external plugin needed, we use afterDatasetsDraw */
+      },
+      scales:{
+        y:{
+          beginAtZero:true,
+          ticks:{ stepSize:1, font:{size:11}, color:'var(--text-muted)' },
+          grid:{ color:'rgba(123,47,255,0.08)' },
+          title:{ display:true, text:'Users', color:'var(--text-muted)', font:{size:11} }
+        },
+        x:{ grid:{display:false}, ticks:{ font:{size:11}, color:'var(--text-muted)' } }
+      }
+    },
+    plugins:[{
+      id:'barLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx: c, data } = chart;
+        data.datasets.forEach((ds, di) => {
+          chart.getDatasetMeta(di).data.forEach((bar, i) => {
+            const val = ds.data[i];
+            c.save();
+            c.font = 'bold 12px Inter, sans-serif';
+            c.fillStyle = bclrs[i];
+            c.textAlign = 'center'; c.textBaseline = 'bottom';
+            c.fillText(val, bar.x, bar.y - 4);
+            c.restore();
+          });
+        });
+      }
+    }]
+  });
+
+  /* Role legend row */
+  document.getElementById('role-legend').innerHTML =
+    labels.map((l,i) =>
+      '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)">' +
+      '<span style="width:10px;height:10px;border-radius:50%;background:' + bclrs[i] + ';display:inline-block"></span>' +
+      l + ' <strong style="color:var(--text-primary)">' + vals[i] + '</strong></div>'
+    ).join('');
+}
+
+function renderActivity(acts) {
+  const tbody = document.getElementById('activity-body');
+  if (!acts.length) {
+    tbody.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fas fa-history"></i><p>No recent activity</p></div></td></tr>';
+    return;
+  }
+  const timeAgo = ts => {
+    if (!ts) return '—';
+    const d = ts._seconds ? new Date(ts._seconds*1000) : new Date(ts);
+    const m = Math.floor((Date.now()-d)/60000);
+    if (m<1) return 'Just now'; if (m<60) return m+'m ago';
+    const h=Math.floor(m/60); if (h<24) return h+'h ago';
+    return Math.floor(h/24)+'d ago';
+  };
+  tbody.innerHTML = acts.slice(0,20).map(a=>`
+    <tr>
+      <td style="color:var(--text-muted);font-size:12px">${timeAgo(a.timestamp||a.createdAt)}</td>
+      <td style="font-weight:500">${a.userName||a.customId||'—'}</td>
+      <td><span class="badge badge-purple">${a.role||'—'}</span></td>
+      <td style="color:var(--text-secondary)">${(a.action||'—').replace(/_/g,' ')}</td>
+    </tr>`).join('');
+}
+
+async function recalcAll() {
+  showLoader('Recalculating all risk scores…');
+  try {
+    const r = await apiCall('/api/risk/all','POST');
+    showToast(`Recalculated ${r.count||0} student risk scores.`,'success');
+    clearCache('/api/admin');
+    loadAdminDashboard();
+  } catch(e){ showToast(e.message,'error'); } finally { hideLoader(); }
+}
+</script>
+{% endblock %}

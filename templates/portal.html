@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduPulse — Select Your Role</title>
+<meta name="description" content="EduPulse Portal — Select your role to continue">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/3d-liquid-glass.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal.css') }}">
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body>
+<canvas id="particle-canvas"></canvas>
+
+<div class="portal-wrapper">
+  <div class="portal-header">
+    <div class="portal-logo">
+      <span class="edu">Edu</span><span class="pulse">Pulse</span>
+    </div>
+    <p class="portal-tagline">Proactive Academic Risk Detection System</p>
+    <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn" style="margin-top:16px">
+      <i id="theme-icon" class="fas fa-moon"></i>
+      <span id="theme-label">Dark</span>
+    </button>
+  </div>
+
+  <h2 class="portal-title">Who are you?</h2>
+  <p class="portal-subtitle">Select your role to access your personalised dashboard</p>
+
+  <div class="role-grid">
+
+    <!-- Admin -->
+    <div class="role-card" onclick="selectRole('admin')" data-tilt>
+      <div class="role-glow" style="--glow:#EF4444"></div>
+      <div class="role-icon-wrap" style="background:linear-gradient(135deg,#EF4444,#F87171)">
+        <i class="fas fa-shield-alt"></i>
+      </div>
+      <h3 class="role-name">Admin</h3>
+      <p class="role-desc">Manage all users, view system-wide analytics and audit logs</p>
+      <div class="role-arrow"><i class="fas fa-arrow-right"></i></div>
+    </div>
+
+    <!-- Faculty Advisor -->
+    <div class="role-card" onclick="selectRole('faculty_advisor')" data-tilt>
+      <div class="role-glow" style="--glow:#F59E0B"></div>
+      <div class="role-icon-wrap" style="background:linear-gradient(135deg,#F59E0B,#FBBF24)">
+        <i class="fas fa-user-tie"></i>
+      </div>
+      <h3 class="role-name">Faculty Advisor</h3>
+      <p class="role-desc">Manage classes, monitor risk scores and schedule Pulse Quizzes</p>
+      <div class="role-arrow"><i class="fas fa-arrow-right"></i></div>
+    </div>
+
+    <!-- Counsellor -->
+    <div class="role-card" onclick="selectRole('counsellor')" data-tilt>
+      <div class="role-glow" style="--glow:#60A5FA"></div>
+      <div class="role-icon-wrap" style="background:linear-gradient(135deg,#3B82F6,#60A5FA)">
+        <i class="fas fa-heart-pulse"></i>
+      </div>
+      <h3 class="role-name">Counsellor</h3>
+      <p class="role-desc">Support assigned students through video calls and case management</p>
+      <div class="role-arrow"><i class="fas fa-arrow-right"></i></div>
+    </div>
+
+    <!-- Subject Teacher -->
+    <div class="role-card" onclick="selectRole('subject_teacher')" data-tilt>
+      <div class="role-glow" style="--glow:#10B981"></div>
+      <div class="role-icon-wrap" style="background:linear-gradient(135deg,#10B981,#34D399)">
+        <i class="fas fa-chalkboard-teacher"></i>
+      </div>
+      <h3 class="role-name">Subject Teacher</h3>
+      <p class="role-desc">Mark attendance, grade assignments, upload notes and manage marks</p>
+      <div class="role-arrow"><i class="fas fa-arrow-right"></i></div>
+    </div>
+
+    <!-- Student -->
+    <div class="role-card" onclick="selectRole('student')" data-tilt>
+      <div class="role-glow" style="--glow:#A78BFA"></div>
+      <div class="role-icon-wrap" style="background:linear-gradient(135deg,#7B2FFF,#A78BFA)">
+        <i class="fas fa-graduation-cap"></i>
+      </div>
+      <h3 class="role-name">Student</h3>
+      <p class="role-desc">Track your marks, attendance, mood and take Pulse Quizzes</p>
+      <div class="role-arrow"><i class="fas fa-arrow-right"></i></div>
+    </div>
+
+  </div>
+
+  <p class="portal-footer">© 2026 EduPulse · Academic Risk Detection</p>
+</div>
+
+<script src="{{ url_for('static', filename='js/particles.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tilt3d.js') }}"></script>
+<script>
+function selectRole(role) {
+  const card = event.currentTarget;
+  card.style.transform = 'scale(0.96)';
+  setTimeout(() => {
+    window.location.href = `/login?role=${role}`;
+  }, 150);
+}
+// Init particles
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initParticles === 'function') initParticles('particle-canvas');
+  if (typeof initTilt === 'function') initTilt('[data-tilt]');
+});
+</script>
+</body>
+</html>

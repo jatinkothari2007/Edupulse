@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Teacher Notes — EduPulse{% endblock %}
+{% block page_title %}Notes Library{% endblock %}
+{% block content %}
+<div class="page-title">Notes & Materials</div>
+<div class="page-subtitle">Upload and manage study materials for your students</div>
+<div class="glass-card" style="padding:24px;margin-bottom:24px">
+  <div class="section-title" style="margin-bottom:16px">Upload New Note</div>
+  <div class="grid-2" style="gap:12px"><div class="form-group"><label class="form-label">Title</label><input id="n-title" class="form-input" placeholder="Lecture 5 — Functions"></div><div class="form-group"><label class="form-label">Subject ID</label><input id="n-subj" class="form-input" placeholder="MAT0001"></div><div class="form-group"><label class="form-label">File URL</label><input id="n-url" class="form-input" placeholder="https://drive.google.com/…"></div><div class="form-group"><label class="form-label">Description</label><input id="n-desc" class="form-input" placeholder="Optional description"></div></div>
+  <div class="form-group"><label class="form-label">Class</label><select id="n-class" class="form-input" style="max-width:300px"></select></div>
+  <button onclick="uploadNote()" class="btn btn-primary" style="margin-top:4px"><i class="fas fa-upload"></i> Upload Note</button>
+</div>
+<div class="glass-card" style="padding:24px">
+  <div class="section-title" style="margin-bottom:16px">My Notes</div>
+  <div id="notes-list"><div class="skeleton" style="height:200px"></div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let _classes=[];
+async function onPageReady(){
+  const d=await apiCall('/api/teacher/classes');
+  _classes=d.classes||[];
+  const sel=document.getElementById('n-class');
+  sel.innerHTML='<option value="">Select class</option>';
+  _classes.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name;sel.appendChild(o);});
+  loadNotes();
+}
+async function loadNotes(){
+  const d=await apiCall('/api/teacher/notes');
+  const notes=d.notes||[];
+  const el=document.getElementById('notes-list');
+  if(!notes.length){el.innerHTML='<div class="empty-state"><i class="fas fa-sticky-note"></i><p>No notes uploaded yet</p></div>';return;}
+  el.innerHTML=notes.map(n=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--divider)"><div><div style="font-weight:600;font-size:13px">${n.title}</div><div style="font-size:11px;color:var(--text-muted)">${n.subject||n.subjectId||'—'} · ${n.date||'—'} · ${n.viewCount||0} views</div></div>${n.fileUrl?`<a href="${n.fileUrl}" target="_blank" class="btn btn-sm btn-secondary"><i class="fas fa-external-link-alt"></i></a>`:''}</div>`).join('');
+}
+async function uploadNote(){
+  const body={title:document.getElementById('n-title').value.trim(),subjectId:document.getElementById('n-subj').value.trim(),fileUrl:document.getElementById('n-url').value.trim(),description:document.getElementById('n-desc').value.trim(),classId:document.getElementById('n-class').value};
+  if(!body.title||!body.subjectId){showToast('Title and subject required','warning');return;}
+  try{await apiCall('/api/teacher/notes','POST',body);showToast('Note uploaded!','success');loadNotes();}
+  catch(e){showToast(e.message,'error');}
+}
+</script>
+{% endblock %}

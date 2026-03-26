@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+{% block title %}Sessions — EduPulse{% endblock %}
+{% block page_title %}Sessions{% endblock %}
+{% block content %}
+
+<style>
+/* ── Premium Sessions Table ─────────────────────────────── */
+.sessions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.sessions-title { font-size: 22px; font-weight: 800; color: var(--text-primary); }
+
+.sessions-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.filter-select {
+    background: rgba(123,47,255,0.10);
+    border: 1px solid rgba(123,47,255,0.25);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    min-width: 130px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237B2FFF'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 30px;
+}
+.filter-select:focus { border-color: rgba(123,47,255,0.6); }
+
+.sessions-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(123,47,255,0.08);
+    border: 1px solid rgba(123,47,255,0.20);
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 180px;
+    transition: border-color 0.2s;
+}
+.sessions-search:focus-within { border-color: rgba(123,47,255,0.55); }
+.sessions-search i { color: rgba(123,47,255,0.7); font-size: 13px; }
+.sessions-search input { background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; width: 100%; }
+.sessions-search input::placeholder { color: var(--text-muted); }
+
+.sessions-table { width: 100%; border-collapse: collapse; }
+.sessions-table thead tr {
+    background: rgba(123,47,255,0.08);
+    border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.sessions-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.sessions-table tbody tr {
+    border-bottom: 1px solid rgba(123,47,255,0.08);
+    transition: background 0.15s;
+}
+.sessions-table tbody tr:hover { background: rgba(123,47,255,0.05); }
+.sessions-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); vertical-align: middle; }
+.sessions-table .row-num { color: var(--text-muted); font-size: 12px; font-weight: 600; width: 32px; }
+.sessions-table .student-name { font-weight: 700; font-size: 13px; }
+.sessions-table .student-uid  { font-size: 11px; color: var(--text-muted); font-family: monospace; margin-top: 2px; }
+.sessions-table .sched-date   { font-size: 13px; color: var(--text-primary); }
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.status-badge.completed { background: rgba(16,185,129,0.15); color: #10B981; }
+.status-badge.scheduled { background: rgba(245,158,11,0.15); color: #F59E0B; }
+.status-badge.cancelled { background: rgba(239,68,68,0.12); color: #EF4444; }
+.status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.join-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: linear-gradient(135deg,#7B2FFF,#A78BFA);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+}
+.join-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.end-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: rgba(239,68,68,0.15);
+    color: #EF4444;
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-left: 6px;
+}
+.end-btn:hover { background: rgba(239,68,68,0.28); }
+
+.btn-schedule {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg,#7B2FFF,#A78BFA);
+    color: #fff;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.btn-schedule:hover { opacity: 0.85; }
+</style>
+
+<!-- Header -->
+<div class="sessions-header">
+    <div class="sessions-title">All Sessions</div>
+    <div class="sessions-controls">
+        <select id="status-filter" class="filter-select" onchange="applyFilters()">
+            <option value="">All Status</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+        <div class="sessions-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="student-search" placeholder="Search student..." oninput="applyFilters()">
+        </div>
+        <button class="btn-schedule" onclick="openScheduleModal()">
+            <i class="fas fa-plus"></i> Schedule
+        </button>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+    <div id="sessions-table-wrap" style="overflow-x:auto">
+        <table class="sessions-table" id="sessions-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Scheduled At</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="sessions-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">
+                    <i class="fas fa-spinner fa-spin" style="font-size:22px;display:block;margin-bottom:10px"></i>Loading sessions…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Schedule Modal -->
+<div id="schedule-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeScheduleModal()">
+    <div class="glass-card" style="padding:28px;max-width:440px;width:100%;margin:20px;position:relative">
+        <button onclick="closeScheduleModal()" style="position:absolute;top:14px;right:18px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">×</button>
+        <div style="font-size:17px;font-weight:800;color:var(--text-primary);margin-bottom:20px">
+            <i class="fas fa-video" style="color:#7B2FFF;margin-right:8px"></i>Schedule Session
+        </div>
+        <div class="form-group"><label class="form-label">Student</label>
+            <select id="s-student" class="form-input">
+                <option>Loading students…</option>
+            </select>
+        </div>
+        <div class="form-group"><label class="form-label">Date &amp; Time</label>
+            <input id="s-time" type="datetime-local" class="form-input">
+        </div>
+        <button onclick="scheduleSession()" class="btn-schedule" style="width:100%;justify-content:center;margin-top:8px">
+            <i class="fas fa-video"></i> Schedule Session
+        </button>
+    </div>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+var _allSessions = [];
+var _students    = [];
+
+async function onPageReady() {
+    const [sd, sess] = await Promise.all([
+        apiCall('/api/counsellor/students').catch(() => ({ students: [] })),
+        apiCall('/api/counsellor/sessions').catch(() => ({ sessions: [] })),
+    ]);
+    _students    = sd.students || [];
+    _allSessions = sess.sessions || [];
+
+    /* Populate student dropdown */
+    const sel = document.getElementById('s-student');
+    sel.innerHTML = _students.length
+        ? _students.map(s => `<option value="${s.uid}">${s.name} (${s.customId || s.uid.slice(0,8)})</option>`).join('')
+        : '<option>No students assigned</option>';
+
+    /* Default datetime */
+    const now = new Date(); now.setMinutes(0);
+    document.getElementById('s-time').value = now.toISOString().slice(0, 16);
+
+    renderTable(_allSessions);
+}
+
+function fmtDate(v) {
+    if (!v) return '—';
+    const d = new Date(v._seconds ? v._seconds * 1000 : v);
+    if (isNaN(d)) return v;
+    return d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'2-digit' })
+        + ' ' + d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+}
+
+function fmtDuration(sec) {
+    if (!sec && sec !== 0) return '—';
+    const m = Math.floor(sec / 60), s = sec % 60;
+    if (m === 0 && s === 0) return '—';
+    return m + 'm' + (s ? ' ' + s + 's' : '');
+}
+
+function statusBadge(status) {
+    const cls = (status || '').toLowerCase();
+    return `<span class="status-badge ${cls}"><span class="dot"></span>${status || '—'}</span>`;
+}
+
+function renderTable(list) {
+    const tbody = document.getElementById('sessions-tbody');
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+            <i class="fas fa-video"></i><p>No sessions found</p></div></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = list.map((s, i) => `
+        <tr>
+            <td class="row-num">${i + 1}</td>
+            <td>
+                <div class="student-name">${s.studentName || '—'}</div>
+                <div class="student-uid">${s.studentUid || s.studentId || ''}</div>
+            </td>
+            <td class="sched-date">${fmtDate(s.scheduledAt)}</td>
+            <td>${statusBadge(s.status)}</td>
+            <td>${fmtDuration(s.duration)}</td>
+            <td style="white-space:nowrap">${(s.status === 'scheduled')
+                ? `<button class="join-btn" onclick="joinMeeting('${(s.sessionId || s.id)}','${(s.studentName||'Student').replace(/'/g,"\\'")}')"><i class="fas fa-video"></i> Join</button>
+                   <button class="end-btn" onclick="endSession('${(s.sessionId || s.id)}')"><i class="fas fa-phone-slash"></i> End</button>`
+                : '<span style="color:var(--text-muted)">—</span>'}</td>
+        </tr>`).join('');
+}
+
+function applyFilters() {
+    const statusVal = document.getElementById('status-filter').value.toLowerCase();
+    const searchVal = (document.getElementById('student-search').value || '').toLowerCase();
+    const filtered = _allSessions.filter(s => {
+        const matchStatus = !statusVal || (s.status || '').toLowerCase() === statusVal;
+        const matchSearch = !searchVal
+            || (s.studentName || '').toLowerCase().includes(searchVal)
+            || (s.studentUid  || '').toLowerCase().includes(searchVal);
+        return matchStatus && matchSearch;
+    });
+    renderTable(filtered);
+}
+
+async function scheduleSession() {
+    const uid = document.getElementById('s-student').value;
+    const at  = document.getElementById('s-time').value;
+    if (!uid || !at) { showToast('Select student and time', 'warning'); return; }
+    showLoader('Scheduling…');
+    try {
+        await apiCall('/api/counsellor/sessions', 'POST', { studentUid: uid, scheduledAt: at });
+        showToast('Session scheduled! Student notified.', 'success');
+        closeScheduleModal();
+        onPageReady();
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { hideLoader(); }
+}
+
+/**
+ * Open the Jitsi meeting directly in the browser (HTTPS context).
+ * Room name is deterministic: EduPulse-{sessionId} so counsellor
+ * and student always land in the same room.
+ */
+function joinMeeting(sessionId, studentName) {
+    const roomName = 'EduPulse-' + sessionId.replace(/[^a-zA-Z0-9]/g, '');
+    const jitsiUrl = 'https://meet.jit.si/' + roomName;
+    showToast('Opening meeting with ' + studentName + '…', 'info');
+    window.open(jitsiUrl, '_blank');
+}
+
+async function endSession(sessionId) {
+    if (!confirm('Mark this session as completed?')) return;
+    showLoader('Ending session…');
+    try {
+        await apiCall(`/api/videocall/session/${sessionId}/complete`, 'PUT', { duration: 0 });
+        showToast('Session marked as completed.', 'success');
+        await onPageReady();
+    } catch(e) {
+        showToast('Failed: ' + e.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
+
+function openScheduleModal()  { document.getElementById('schedule-modal').style.display = 'flex'; }
+function closeScheduleModal() { document.getElementById('schedule-modal').style.display = 'none'; }
+</script>
+{% endblock %}

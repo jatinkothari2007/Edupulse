@@ -1,0 +1,352 @@
+{% extends 'base.html' %}
+{% block title %}Manage Users — EduPulse{% endblock %}
+{% block page_title %}Manage Users{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Premium Users Table ── */
+.users-table { width:100%; border-collapse:collapse; }
+.users-table thead tr {
+  background: rgba(123,47,255,0.08);
+  border-bottom: 2px solid rgba(123,47,255,0.15);
+}
+.users-table thead th {
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.users-table tbody tr {
+  border-bottom: 1px solid rgba(123,47,255,0.07);
+  transition: background 0.15s;
+}
+.users-table tbody tr:last-child { border-bottom:none; }
+.users-table tbody tr:hover     { background: rgba(123,47,255,0.05); }
+.users-table tbody td           { padding: 14px 20px; font-size: 13px; vertical-align: middle; }
+
+/* Avatar */
+.u-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; flex-shrink: 0;
+}
+/* ID chip */
+.u-id {
+  font-family: monospace; font-size: 11px; font-weight: 700;
+  background: rgba(123,47,255,0.10); color: #A78BFA;
+  padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+}
+/* Status dot */
+.u-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700;
+}
+/* Action icon buttons */
+.u-action-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; transition: transform 0.15s, opacity 0.15s;
+}
+.u-action-btn:hover { transform: scale(1.12); opacity: 0.9; }
+
+/* Search + filter bar */
+.u-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.u-search {
+  flex: 1; min-width: 200px; padding: 8px 14px 8px 36px;
+  border-radius: 12px; border: 1px solid rgba(123,47,255,0.2);
+  background: rgba(15,10,30,0.7); color: var(--text-primary);
+  font-size: 13px; position: relative;
+}
+.u-search:focus { outline: none; border-color: #7B2FFF; box-shadow: 0 0 0 3px rgba(123,47,255,0.12); }
+.u-search-wrap { position: relative; flex: 1; min-width: 200px; }
+.u-search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 12px; }
+.u-role-select {
+  padding: 8px 14px; border-radius: 12px;
+  border: 1px solid rgba(123,47,255,0.2); background: rgba(15,10,30,0.85);
+  color: var(--text-primary); font-size: 13px; min-width: 160px;
+}
+.u-role-select:focus { outline: none; border-color: #7B2FFF; }
+.u-role-select option { background: #1a1035; }
+
+/* Summary stats strip */
+.u-stats-strip {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px; background: rgba(123,47,255,0.04);
+  border-bottom: 1px solid rgba(123,47,255,0.08);
+}
+.u-stat { font-size: 12px; color: var(--text-muted); }
+.u-stat strong { color: var(--text-primary); margin-left: 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">User Management</div>
+<div class="page-subtitle">Create, deactivate and manage all EduPulse accounts</div>
+
+<div class="glass-card" style="padding:0;overflow:hidden;margin-top:20px">
+
+  <!-- Top bar -->
+  <div style="padding:20px 20px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border-bottom:1px solid rgba(123,47,255,0.1)">
+    <div style="font-size:15px;font-weight:700">All Users</div>
+    <div class="u-bar">
+      <div class="u-search-wrap">
+        <i class="fas fa-search"></i>
+        <input id="u-search" class="u-search" placeholder="Search by name, ID or email…" oninput="filterUsers()">
+      </div>
+      <select id="role-filter" class="u-role-select" onchange="loadUsers()">
+        <option value="">All Roles</option>
+        <option value="admin">Admin</option>
+        <option value="faculty_advisor">Faculty Advisor</option>
+        <option value="subject_teacher">Subject Teacher</option>
+        <option value="counsellor">Counsellor</option>
+        <option value="student">Student</option>
+      </select>
+      <button class="btn btn-primary" onclick="openCreateModal()">
+        <i class="fas fa-plus"></i> New User
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats strip -->
+  <div class="u-stats-strip" id="u-stats-strip" style="display:none">
+    <div class="u-stat">Total <strong id="us-total">—</strong></div>
+    <div class="u-stat">Active <strong id="us-active" style="color:#10B981">—</strong></div>
+    <div class="u-stat">Inactive <strong id="us-inactive" style="color:#EF4444">—</strong></div>
+    <div class="u-stat" id="us-role-stat"></div>
+  </div>
+
+  <!-- Table -->
+  <div id="user-table-wrap" style="overflow-x:auto">
+    <div class="skeleton" style="height:200px;margin:20px"></div>
+  </div>
+
+</div>
+
+<!-- Create User Modal -->
+<div id="create-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)closeCreateModal()">
+  <div class="glass-card" style="padding:32px;max-width:500px;width:100%;margin:20px;position:relative">
+    <button onclick="closeCreateModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;color:var(--text-muted);cursor:pointer">×</button>
+    <div class="section-title" style="margin-bottom:20px">Create New User</div>
+    <form id="create-form" onsubmit="createUser(event)">
+      <div class="form-group"><label class="form-label">Full Name</label><input id="cu-name" type="text" class="form-input" placeholder="Dr. John Smith" required></div>
+      <div class="form-group"><label class="form-label">Email</label><input id="cu-email" type="email" class="form-input" placeholder="john@edupulse.edu" required></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="cu-pwd" type="password" class="form-input" placeholder="Min 6 characters" required minlength="6"></div>
+      <div class="form-group"><label class="form-label">Role</label>
+        <select id="cu-role" class="form-input" required onchange="toggleRoleFields(this.value)">
+          <option value="">Select role</option>
+          <option value="admin">Admin</option>
+          <option value="faculty_advisor">Faculty Advisor</option>
+          <option value="subject_teacher">Subject Teacher</option>
+          <option value="counsellor">Counsellor</option>
+          <option value="student">Student</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Post Title</label><input id="cu-title" type="text" class="form-input" placeholder="e.g. B.Tech CSE Student"></div>
+      <div id="cu-teacher-fields" style="display:none">
+        <div class="form-group"><label class="form-label">Subject</label><input id="cu-subject" type="text" class="form-input" placeholder="Mathematics"></div>
+      </div>
+      <div id="cu-error" style="color:#EF4444;font-size:13px;margin-bottom:8px;display:none"></div>
+      <button type="submit" id="cu-btn" class="btn btn-primary" style="width:100%;justify-content:center"><i class="fas fa-plus"></i> Create Account</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _allUsers = [];
+
+const ROLE_META = {
+  admin           : { label:'Admin',           color:'#EF4444', bg:'rgba(239,68,68,0.12)'   },
+  faculty_advisor : { label:'Faculty Advisor',  color:'#F59E0B', bg:'rgba(245,158,11,0.12)'  },
+  subject_teacher : { label:'Subject Teacher',  color:'#10B981', bg:'rgba(16,185,129,0.12)'  },
+  counsellor      : { label:'Counsellor',       color:'#3B82F6', bg:'rgba(59,130,246,0.12)'  },
+  student         : { label:'Student',          color:'#7B2FFF', bg:'rgba(123,47,255,0.12)'  },
+};
+
+function initials(name) {
+  if (!name) return '?';
+  var p = name.trim().split(' ').filter(Boolean);
+  return (p[0][0] + (p[1]?p[1][0]:'')).toUpperCase();
+}
+
+function avatarColor(role) {
+  return (ROLE_META[role]||{color:'#7B2FFF'}).color;
+}
+
+async function loadUsers() {
+  var role = document.getElementById('role-filter').value;
+  try {
+    var data  = await apiCall('/api/admin/users' + (role ? '?role=' + role : ''));
+    _allUsers = data.users || [];
+    renderStats(_allUsers);
+    filterUsers();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+function renderStats(users) {
+  var strip = document.getElementById('u-stats-strip');
+  strip.style.display = 'flex';
+  document.getElementById('us-total').textContent   = users.length;
+  document.getElementById('us-active').textContent  = users.filter(function(u){ return u.active; }).length;
+  document.getElementById('us-inactive').textContent= users.filter(function(u){ return !u.active; }).length;
+  var role = document.getElementById('role-filter').value;
+  document.getElementById('us-role-stat').innerHTML = role
+    ? 'Showing: <strong style="color:#A78BFA">' + (ROLE_META[role]||{label:role}).label + '</strong>'
+    : '';
+}
+
+function filterUsers() {
+  var q    = (document.getElementById('u-search').value || '').toLowerCase();
+  var list = _allUsers.filter(function(u) {
+    return !q ||
+      (u.name||'').toLowerCase().indexOf(q) >= 0 ||
+      (u.customId||'').toLowerCase().indexOf(q) >= 0 ||
+      (u.email||'').toLowerCase().indexOf(q) >= 0;
+  });
+  renderTable(list);
+}
+
+function renderTable(users) {
+  var wrap = document.getElementById('user-table-wrap');
+  if (!users.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:60px"><i class="fas fa-users"></i><p>No users found</p></div>';
+    return;
+  }
+
+  var rows = users.map(function(u, i) {
+    var rm    = ROLE_META[u.role] || { label: u.role||'—', color:'#7B2FFF', bg:'rgba(123,47,255,0.12)' };
+    var ini   = initials(u.name);
+    var ac    = avatarColor(u.role);
+    var active = u.active !== false;
+    var rowBg  = (i % 2 === 0) ? '' : 'background:rgba(123,47,255,0.02)';
+
+    return '<tr style="' + rowBg + '">' +
+      /* # */
+      '<td style="color:var(--text-muted);font-size:12px;font-weight:600;width:40px">' + (i+1) + '</td>' +
+      /* Avatar + Name */
+      '<td style="min-width:180px">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div class="u-avatar" style="background:' + ac + '20;color:' + ac + '">' + ini + '</div>' +
+          '<div>' +
+            '<div style="font-weight:700;font-size:13px">' + (u.name||'—') + '</div>' +
+            '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + (u.postTitle||'') + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</td>' +
+      /* ID */
+      '<td><span class="u-id">' + (u.customId||'—') + '</span></td>' +
+      /* Email */
+      '<td style="color:var(--text-secondary);font-size:12px;min-width:200px">' +
+        '<i class="fas fa-envelope" style="margin-right:6px;color:var(--text-muted);font-size:10px"></i>' + (u.email||'—') +
+      '</td>' +
+      /* Role */
+      '<td>' +
+        '<span style="background:' + rm.bg + ';color:' + rm.color + ';padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">' +
+          rm.label +
+        '</span>' +
+      '</td>' +
+      /* Status */
+      '<td>' +
+        '<span class="u-status">' +
+          '<i class="fas fa-circle" style="font-size:7px;color:' + (active?'#10B981':'#EF4444') + '"></i>' +
+          '<span style="color:' + (active?'#10B981':'#EF4444') + '">' + (active?'Active':'Inactive') + '</span>' +
+        '</span>' +
+      '</td>' +
+      /* Actions */
+      '<td>' +
+        '<div style="display:flex;gap:6px">' +
+        (active
+          ? '<button onclick="deactivate(\'' + u.uid + '\')" class="u-action-btn" title="Deactivate" style="background:rgba(239,68,68,0.12);color:#EF4444"><i class="fas fa-ban"></i></button>'
+          : '<button onclick="reactivate(\'' + u.uid + '\')" class="u-action-btn" title="Reactivate" style="background:rgba(16,185,129,0.12);color:#10B981"><i class="fas fa-check"></i></button>') +
+        '<button onclick="resetPwd(\'' + u.uid + '\')" class="u-action-btn" title="Reset Password" style="background:rgba(123,47,255,0.12);color:#A78BFA"><i class="fas fa-key"></i></button>' +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  wrap.innerHTML =
+    '<table class="users-table">' +
+      '<thead><tr>' +
+        '<th style="width:40px">#</th>' +
+        '<th style="min-width:180px">Name</th>' +
+        '<th>ID</th>' +
+        '<th style="min-width:200px">Email</th>' +
+        '<th>Role</th>' +
+        '<th>Status</th>' +
+        '<th>Actions</th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
+}
+
+async function deactivate(uid) {
+  if (!confirm('Deactivate this user?')) return;
+  await apiCall('/api/admin/users/' + uid + '/deactivate', 'PUT');
+  showToast('User deactivated', 'success'); loadUsers();
+}
+async function reactivate(uid) {
+  await apiCall('/api/admin/users/' + uid + '/reactivate', 'PUT');
+  showToast('User reactivated', 'success'); loadUsers();
+}
+async function resetPwd(uid) {
+  var np = prompt('Enter new password (min 6 chars):');
+  if (!np || np.length < 6) return;
+  await apiCall('/api/admin/users/' + uid + '/reset-password', 'POST', { password: np });
+  showToast('Password reset successfully', 'success');
+}
+
+function openCreateModal()  { document.getElementById('create-modal').style.display='flex'; }
+function closeCreateModal() { document.getElementById('create-modal').style.display='none'; document.getElementById('create-form').reset(); }
+function toggleRoleFields(role) { document.getElementById('cu-teacher-fields').style.display = role==='subject_teacher'?'block':'none'; }
+
+async function createUser(e) {
+  e.preventDefault();
+  var errEl = document.getElementById('cu-error');
+  errEl.style.display = 'none';
+  var btn = document.getElementById('cu-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating…';
+  var body = {
+    name     : document.getElementById('cu-name').value,
+    email    : document.getElementById('cu-email').value,
+    password : document.getElementById('cu-pwd').value,
+    role     : document.getElementById('cu-role').value,
+    postTitle: document.getElementById('cu-title').value,
+    subject  : document.getElementById('cu-subject').value,
+  };
+  try {
+    var r = await apiCall('/api/admin/users', 'POST', body);
+    showToast('User created! ID: ' + r.customId, 'success');
+    closeCreateModal(); loadUsers();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> Create Account';
+  }
+}
+
+function onPageReady() { loadUsers(); }
+
+/* ── Self-execute on SPA navigation ── */
+waitForAuth().then(function(u) { if (u) loadUsers(); });
+
+/* Hoist all onclick-used functions to window */
+window.onPageReady      = onPageReady;
+window.loadUsers        = loadUsers;
+window.filterUsers      = filterUsers;
+window.openCreateModal  = openCreateModal;
+window.closeCreateModal = closeCreateModal;
+window.toggleRoleFields = toggleRoleFields;
+window.createUser       = createUser;
+window.deactivate       = deactivate;
+window.reactivate       = reactivate;
+window.resetPwd         = resetPwd;
+</script>
+{% endblock %}

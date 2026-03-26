@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Assignments — EduPulse{% endblock %}
+{% block page_title %}Assignments{% endblock %}
+{% block page_roles_check %}requireLogin();{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/teacher"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/notes"><i class="fas fa-sticky-note"></i>Notes</a>
+<a class="nav-link" href="/pages/attendance"><i class="fas fa-calendar-check"></i>Attendance</a>
+<a class="nav-link" href="/pages/assignments"><i class="fas fa-tasks"></i>Assignments</a>
+<a class="nav-link" href="/pages/marks"><i class="fas fa-star"></i>Marks</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Assignments</div>
+<div class="page-subtitle">View and manage assignments</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="search-bar" style="width:240px"><i class="fas fa-search"></i><input type="text" placeholder="Search..." id="asn-search" oninput="filterAssignments(this.value)"></div>
+  <button class="btn btn-primary" id="create-asn-btn" style="display:none" onclick="openCreateAssignmentModal()"><i class="fas fa-plus"></i>Create</button>
+</div>
+<div class="table-wrapper">
+  <table class="data-table">
+    <thead><tr>
+      <th onclick="sortTbl(0,this)">Title <span class="sort-icon"></span></th>
+      <th onclick="sortTbl(1,this)">Subject <span class="sort-icon"></span></th>
+      <th onclick="sortTbl(2,this)">Due Date <span class="sort-icon"></span></th>
+      <th>Max Marks</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="asn-body"><tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody>
+  </table>
+  <div class="pagination" id="asn-pagination"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allAsn=[],asnPage=1;const PER=10;
+async function onPageReady(user){
+  if(['admin','faculty_advisor','subject_teacher'].includes(user.role)){
+    document.getElementById('create-asn-btn').style.display='flex';
+  }
+  await loadAssignments(user.role);
+}
+async function loadAssignments(role){
+  try{
+    let r;
+    if(role==='student') r=await apiCall('/api/student/assignments');
+    else r=await apiCall('/api/teacher/assignments');
+    allAsn=r.data||[];renderAsn(allAsn,1);
+  }catch(e){showToast('Failed to load assignments','error');}
+}
+function filterAssignments(q){
+  renderAsn(allAsn.filter(a=>(a.title||'').toLowerCase().includes(q.toLowerCase())),1);
+}
+function sortTbl(col,th){
+  const tb=document.getElementById('asn-body');
+  const rows=Array.from(tb.querySelectorAll('tr'));
+  const asc=th.classList.contains('sorted-asc');
+  document.querySelectorAll('#asn-body th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc'));
+  th.classList.add(asc?'sorted-desc':'sorted-asc');
+  rows.sort((a,b)=>{const av=(a.cells[col]||{}).innerText||'',bv=(b.cells[col]||{}).innerText||'';return asc?bv.localeCompare(av):av.localeCompare(bv);});
+  rows.forEach(r=>tb.appendChild(r));
+}
+function renderAsn(data,page){
+  asnPage=page;const start=(page-1)*PER,slice=data.slice(start,start+PER);
+  const tb=document.getElementById('asn-body');
+  if(!slice.length){tb.innerHTML='<tr><td colspan="6" class="empty-state">No assignments</td></tr>';return;}
+  const role=window.currentUser?.role;
+  tb.innerHTML=slice.map(a=>`<tr>
+    <td><strong>${a.title}</strong><div style="font-size:11px;color:var(--text-muted)">${a.description||''}</div></td>
+    <td>${a.subjectId||'—'}</td>
+    <td><span style="${new Date(a.dueDate)<new Date()?'color:#EF4444':'color:#10B981'}">${a.dueDate||'—'}</span></td>
+    <td>${a.maxMarks||100}</td>
+    <td>${a.submitted!==undefined?`<span class="badge" style="${a.submitted?'background:rgba(16,185,129,0.12);color:#059669':'background:rgba(239,68,68,0.12);color:#DC2626'}">${a.submitted?'Submitted':'Pending'}</span>`:'—'}</td>
+    <td>${role==='student'&&!a.submitted?`<button class="btn btn-primary btn-sm" onclick="window.location.href='/dashboard/student'"><i class="fas fa-upload"></i>Submit</button>`:'—'}</td>
+  </tr>`).join('');
+  const total=Math.ceil(data.length/PER);
+  const pg=document.getElementById('asn-pagination');
+  if(total<=1){pg.innerHTML='';return;}
+  pg.innerHTML=Array.from({length:total},(_,i)=>i+1).map(i=>`<button class="page-btn ${i===page?'active':''}" onclick="renderAsn(allAsn,${i})">${i}</button>`).join('');
+}
+function openCreateAssignmentModal(){
+  openModal('Create Assignment',`
+    <div class="form-group"><label class="form-label">Class ID</label><input class="form-input" id="m-cid" placeholder="Class ID"></div>
+    <div class="form-group"><label class="form-label">Subject ID</label><input class="form-input" id="m-sid" placeholder="Subject ID"></div>
+    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="m-title" placeholder="Assignment title"></div>
+    <div class="form-group"><label class="form-label">Due Date</label><input class="form-input" id="m-due" type="date"></div>
+    <div class="form-group"><label class="form-label">Max Marks</label><input class="form-input" id="m-marks" type="number" value="100"></div>`,async()=>{
+    const cid=document.getElementById('m-cid').value.trim(),sid=document.getElementById('m-sid').value.trim(),title=document.getElementById('m-title').value.trim(),due=document.getElementById('m-due').value;
+    if(!cid||!sid||!title||!due){showToast('All fields required','warning');return;}
+    showLoader();try{await apiCall('/api/teacher/assignments','POST',{classId:cid,subjectId:sid,title,dueDate:due,maxMarks:parseInt(document.getElementById('m-marks').value)||100});closeModal();showToast('Assignment created!','success');loadAssignments(window.currentUser?.role);}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

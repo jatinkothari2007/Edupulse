@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Audit Logs — EduPulse{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+{% block page_roles_check %}requireLogin(['admin']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/admin"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/users"><i class="fas fa-users"></i>Users</a>
+<a class="nav-link" href="/pages/audit-logs"><i class="fas fa-history"></i>Audit Logs</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Audit Logs</div>
+<div class="page-subtitle">System activity and security event log</div>
+<div class="filter-row" style="margin-bottom:16px">
+  <div class="search-bar" style="width:260px"><i class="fas fa-search"></i>
+    <input type="text" placeholder="Search logs..." id="log-search" oninput="filterLogs(this.value)"></div>
+  <select class="form-input form-select" id="action-filter" style="width:180px" onchange="filterLogs(document.getElementById('log-search').value)">
+    <option value="">All Actions</option>
+    <option value="LOGIN">Login</option>
+    <option value="LOGOUT">Logout</option>
+    <option value="CREATE">Create</option>
+    <option value="UPDATE">Update</option>
+    <option value="DELETE">Delete</option>
+    <option value="PASSWORD_RESET">Password Reset</option>
+  </select>
+</div>
+<div class="table-wrapper">
+  <table class="data-table" id="audit-table">
+    <thead><tr>
+      <th onclick="sortTbl(0,this)">User <span class="sort-icon"></span></th>
+      <th>Role</th>
+      <th onclick="sortTbl(2,this)">Action <span class="sort-icon"></span></th>
+      <th>Details</th>
+      <th onclick="sortTbl(4,this)">Timestamp <span class="sort-icon"></span></th>
+    </tr></thead>
+    <tbody id="log-body"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading logs...</td></tr></tbody>
+  </table>
+  <div class="pagination" id="log-pagination"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allLogs=[],logPage=1;const PER=15;
+async function onPageReady(){await loadLogs();}
+async function loadLogs(){
+  try{const r=await apiCall('/api/admin/audit-logs?limit=100');allLogs=r.data||[];renderLogs(allLogs,1);}
+  catch(e){showToast('Failed to load audit logs','error');}
+}
+function filterLogs(q){
+  const action=document.getElementById('action-filter').value;
+  let f=allLogs;
+  if(action)f=f.filter(l=>(l.action||'').includes(action));
+  if(q)f=f.filter(l=>(l.userName||''+(l.action||'')+(l.details||'')).toLowerCase().includes(q.toLowerCase()));
+  renderLogs(f,1);
+}
+function renderLogs(data,page){
+  logPage=page;const start=(page-1)*PER,slice=data.slice(start,start+PER);
+  const tb=document.getElementById('log-body');
+  if(!slice.length){tb.innerHTML='<tr><td colspan="5" class="empty-state">No logs found</td></tr>';return;}
+  const actionColor={LOGIN:'#10B981',LOGOUT:'#F59E0B',CREATE:'#7B2FFF',UPDATE:'#60A5FA',DELETE:'#EF4444',PASSWORD_RESET:'#F472B6'};
+  tb.innerHTML=slice.map(l=>{
+    const col=actionColor[l.action]||'#1E1B4B';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="user-avatar" style="width:28px;height:28px;font-size:11px">${(l.userName||'?')[0].toUpperCase()}</div>${l.userName||'Unknown'}</div></td>
+      <td><span class="badge badge-role" style="font-size:11px">${l.role||'—'}</span></td>
+      <td><code style="background:${col}18;color:${col};padding:3px 8px;border-radius:6px;font-size:12px">${l.action||'—'}</code></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text-secondary)">${l.details||'—'}</td>
+      <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${l.createdAt?new Date(l.createdAt).toLocaleString():'—'}</td>
+    </tr>`;
+  }).join('');
+  const total=Math.ceil(data.length/PER);
+  const pg=document.getElementById('log-pagination');
+  if(total<=1){pg.innerHTML='';return;}
+  pg.innerHTML=Array.from({length:total},(_,i)=>i+1).map(i=>`<button class="page-btn ${i===page?'active':''}" onclick="renderLogs(allLogs,${i})">${i}</button>`).join('');
+}
+function sortTbl(col,th){
+  const rows=Array.from(document.getElementById('log-body').querySelectorAll('tr'));
+  const asc=th.classList.contains('sorted-asc');
+  document.querySelectorAll('#audit-table th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc'));
+  th.classList.add(asc?'sorted-desc':'sorted-asc');
+  rows.sort((a,b)=>{const av=(a.cells[col]||{}).innerText||'',bv=(b.cells[col]||{}).innerText||'';return asc?bv.localeCompare(av):av.localeCompare(bv);});
+  rows.forEach(r=>document.getElementById('log-body').appendChild(r));
+}
+</script>
+{% endblock %}

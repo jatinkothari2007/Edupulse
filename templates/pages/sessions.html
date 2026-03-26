@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Counselling Sessions — EduPulse{% endblock %}
+{% block page_title %}Counselling Sessions{% endblock %}
+{% block page_roles_check %}requireLogin(['counsellor','admin','student']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/counsellor"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/sessions"><i class="fas fa-calendar-alt"></i>Sessions</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Counselling Sessions</div>
+<div class="page-subtitle">Manage and view scheduled sessions</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="search-bar" style="width:240px"><i class="fas fa-search"></i><input type="text" placeholder="Search sessions..." id="ses-search" oninput="filterSessions(this.value)"></div>
+  <button class="btn btn-primary" id="book-btn" style="display:none" onclick="openBookModal()"><i class="fas fa-calendar-plus"></i>Book Session</button>
+</div>
+<div id="sessions-list">
+  <div style="text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allSessions=[],myStudents=[];
+async function onPageReady(user){
+  if(user.role==='counsellor'||user.role==='admin'){
+    document.getElementById('book-btn').style.display='flex';
+    const sr=await apiCall('/api/counsellor/students').catch(()=>({data:[]}));
+    myStudents=sr.data||[];
+  }
+  await loadSessions(user.role);
+}
+async function loadSessions(role){
+  try{
+    let r;
+    if(role==='student')r=await apiCall('/api/student/sessions');
+    else r=await apiCall('/api/counsellor/sessions');
+    allSessions=r.data||[];renderSessions(allSessions);
+  }catch(e){showToast('Failed to load sessions','error');}
+}
+function filterSessions(q){
+  renderSessions(allSessions.filter(s=>(s.studentName||s.studentId||'').toLowerCase().includes(q.toLowerCase())));
+}
+function renderSessions(data){
+  const el=document.getElementById('sessions-list');
+  if(!data.length){el.innerHTML='<div class="empty-state"><i class="fas fa-calendar-times"></i><h3>No sessions</h3><p>No counselling sessions scheduled</p></div>';return;}
+  el.innerHTML=data.map(s=>{
+    const d=new Date(s.date);const isUpcoming=d>=new Date();
+    return `<div class="session-card glass-card">
+      <div class="session-date" style="text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--purple-primary);">${d.getDate()}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${d.toLocaleDateString('en',{month:'short'})}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${s.time||''}</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700">${s.studentName||s.studentId||'Student'}</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${s.notes||'No notes'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <span class="badge" style="${isUpcoming?'background:rgba(16,185,129,0.12);color:#059669':'background:rgba(167,139,250,0.12);color:#7B2FFF'}">${isUpcoming?'Upcoming':'Past'}</span>
+        ${s.studentId?`<button class="btn btn-secondary btn-sm" onclick="location.href='/pages/messaging?uid=${s.studentId}&name='+encodeURIComponent('${s.studentName||'Student'}')"><i class="fas fa-comment"></i>Chat</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+function openBookModal(){
+  const opts=myStudents.map(s=>`<option value="${s.uid}">${s.name}</option>`).join('');
+  openModal('Book Session',`
+    <div class="form-group"><label class="form-label">Student</label><select class="form-input" id="m-sid">${opts||'<option>No students</option>'}</select></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="m-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+    <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="m-time" type="time" value="10:00"></div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="m-notes" rows="3" placeholder="Session agenda..."></textarea></div>`,async()=>{
+    const sid=document.getElementById('m-sid').value,date=document.getElementById('m-date').value,time=document.getElementById('m-time').value;
+    if(!sid||!date||!time){showToast('Student, date & time required','warning');return;}
+    showLoader();try{await apiCall('/api/counsellor/sessions','POST',{studentId:sid,date,time,notes:document.getElementById('m-notes').value});closeModal();showToast('Session booked!','success');loadSessions('counsellor');}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

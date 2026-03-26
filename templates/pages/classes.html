@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Classes — EduPulse{% endblock %}
+{% block page_title %}Classes{% endblock %}
+{% block page_roles_check %}requireLogin(['admin','student_advisor','faculty_advisor']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/advisor"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/classes"><i class="fas fa-chalkboard"></i>Classes</a>
+<a class="nav-link" href="/pages/polls"><i class="fas fa-poll"></i>Polls</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Classes</div>
+<div class="page-subtitle">Manage academic classes and enrollments</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="search-bar" style="width:240px"><i class="fas fa-search"></i><input type="text" placeholder="Search classes..." id="cls-search" oninput="filterClasses(this.value)"></div>
+  <button class="btn btn-primary" onclick="openCreateClassModal()"><i class="fas fa-plus"></i>New Class</button>
+</div>
+<div id="classes-grid" class="grid-auto">
+  <div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allClasses=[];
+async function onPageReady(){await loadClasses();}
+async function loadClasses(){
+  try{const r=await apiCall('/api/advisor/classes');allClasses=r.data||[];renderClasses(allClasses);}
+  catch(e){showToast('Failed to load classes','error');}
+}
+function filterClasses(q){renderClasses(allClasses.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())));}
+function renderClasses(data){
+  const el=document.getElementById('classes-grid');
+  if(!data.length){el.innerHTML='<div style="grid-column:1/-1" class="empty-state"><i class="fas fa-chalkboard"></i><h3>No classes yet</h3><p>Create your first class to get started</p></div>';return;}
+  el.innerHTML=data.map(c=>`
+    <div class="glass-card" style="padding:24px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--text-primary)">${c.name}</h3>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:4px">${c.description||'No description'}</p>
+        </div>
+        <span class="badge badge-role"><i class="fas fa-users"></i> ${(c.students||[]).length} students</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">
+        <div><i class="fas fa-id-card" style="width:18px;color:var(--purple-light)"></i>ID: <code>${c.id}</code></div>
+        <div><i class="fas fa-user-tie" style="width:18px;color:var(--purple-light)"></i>Faculty: ${c.facultyAdvisorId||'Not assigned'}</div>
+        <div><i class="fas fa-heart" style="width:18px;color:var(--purple-light)"></i>Counsellor: ${c.counsellorId||'Not assigned'}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="openReport('/api/reports/class/${c.id}')"><i class="fas fa-file-pdf"></i>Report</button>
+        <button class="btn btn-sm" style="background:rgba(123,47,255,0.10);color:#7B2FFF" onclick="editClass('${c.id}','${c.name}')"><i class="fas fa-edit"></i>Edit</button>
+      </div>
+    </div>`).join('');
+  if(window.reinitTilt)window.reinitTilt();
+}
+function openCreateClassModal(){
+  openModal('Create New Class',`
+    <div class="form-group"><label class="form-label">Class Name</label><input class="form-input" id="m-name" placeholder="e.g. CS-2025-A"></div>
+    <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="m-desc" rows="3" placeholder="Description..."></textarea></div>
+    <div class="form-group"><label class="form-label">Faculty Advisor UID</label><input class="form-input" id="m-fid" placeholder="Firebase UID"></div>
+    <div class="form-group"><label class="form-label">Counsellor UID</label><input class="form-input" id="m-cid" placeholder="Firebase UID"></div>`,async()=>{
+    const n=document.getElementById('m-name').value.trim();
+    if(!n){showToast('Class name required','warning');return;}
+    showLoader();try{await apiCall('/api/advisor/classes','POST',{name:n,description:document.getElementById('m-desc').value,facultyAdvisorId:document.getElementById('m-fid').value,counsellorId:document.getElementById('m-cid').value});closeModal();showToast('Class created!','success');loadClasses();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+function editClass(id,name){
+  openModal('Edit Class',`
+    <div class="form-group"><label class="form-label">Class Name</label><input class="form-input" id="m-name" value="${name}"></div>`,async()=>{
+    showLoader();try{await apiCall('/api/advisor/classes/'+id,'PUT',{name:document.getElementById('m-name').value});closeModal();showToast('Class updated!','success');loadClasses();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

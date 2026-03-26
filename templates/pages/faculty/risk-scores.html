@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% block title %}Risk Scores — EduPulse{% endblock %}
+{% block page_title %}Class Risk Scores{% endblock %}
+{% block extra_css %}
+<style>
+.risk-table { width:100%; border-collapse:collapse; }
+.risk-table thead tr {
+  background: rgba(123,47,255,0.08);
+  border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.risk-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.risk-table tbody tr {
+  border-bottom: 1px solid rgba(123,47,255,0.07);
+  transition: background 0.15s;
+}
+.risk-table tbody tr:last-child { border-bottom: none; }
+.risk-table tbody tr:hover     { background: rgba(123,47,255,0.04); }
+.risk-table tbody td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
+
+.id-chip {
+  font-family: monospace; font-size: 11px; font-weight: 700;
+  background: rgba(123,47,255,0.10); color: #A78BFA;
+  padding: 3px 9px; border-radius: 20px;
+}
+
+.risk-bar-wrap { display:flex; align-items:center; gap:10px; }
+.risk-bar-bg   { width:90px; height:7px; background:var(--divider); border-radius:4px; overflow:hidden; flex-shrink:0; }
+.risk-bar-fill { height:100%; border-radius:4px; transition: width .3s; }
+
+.level-badge {
+  display:inline-block; padding:4px 12px; border-radius:20px;
+  font-size:11px; font-weight:800; letter-spacing:0.05em;
+}
+.level-high   { background:rgba(239,68,68,0.12);  color:#EF4444; }
+.level-medium { background:rgba(245,158,11,0.12); color:#F59E0B; }
+.level-low    { background:rgba(16,185,129,0.12); color:#10B981; }
+
+.trend-pill {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px;
+}
+.trend-up   { background:rgba(239,68,68,0.10);  color:#EF4444; }
+.trend-down { background:rgba(16,185,129,0.10); color:#10B981; }
+.trend-flat { background:rgba(156,163,175,0.10); color:var(--text-muted); }
+
+.act-btn {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 12px; border-radius:8px; border:none;
+  cursor:pointer; font-size:12px; font-weight:600;
+  transition: background .15s;
+}
+.act-view { background:rgba(123,47,255,0.12); color:#A78BFA; }
+.act-view:hover { background:rgba(123,47,255,0.25); }
+.act-pdf  { background:rgba(239,68,68,0.10); color:#EF4444; }
+.act-pdf:hover  { background:rgba(239,68,68,0.22); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Student Risk Scores</div>
+    <div class="page-subtitle">Monitor and manage academic risk across your class</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <select id="risk-filter" class="form-input" style="width:150px;padding:8px 12px" onchange="filterRisk()">
+      <option value="">All Levels</option>
+      <option>HIGH</option>
+      <option>MEDIUM</option>
+      <option>LOW</option>
+    </select>
+    <button class="btn btn-secondary" onclick="recalcAll()"><i class="fas fa-sync"></i> Recalculate</button>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-grid-3" style="margin-bottom:20px" id="summary-stats">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)"><i class="fas fa-exclamation-triangle" style="color:#EF4444"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-high">—</div><div class="stat-label">High Risk</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-minus-circle" style="color:#F59E0B"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-medium">—</div><div class="stat-label">Medium Risk</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-check-circle" style="color:#10B981"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-low">—</div><div class="stat-label">Low Risk</div></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+  <div style="overflow-x:auto">
+    <table class="risk-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Student ID</th>
+          <th>Name</th>
+          <th>Class</th>
+          <th>Risk Score</th>
+          <th>Level</th>
+          <th>Trend</th>
+          <th>Counsellor</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="risk-tbody">
+        <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <i class="fas fa-spinner fa-spin" style="font-size:22px;display:block;margin-bottom:10px"></i>Loading…
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);align-items:center;justify-content:center" onclick="if(event.target===this)closeDetail()">
+  <div class="glass-card" style="padding:32px;max-width:620px;width:100%;margin:20px;max-height:85vh;overflow-y:auto;position:relative">
+    <button onclick="closeDetail()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer">×</button>
+    <div id="detail-content"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _allStudents = [];
+
+async function onPageReady() {
+  try {
+    const r = await apiCall('/api/faculty/risk-scores');
+    _allStudents = (r.students || []).map(s => ({
+      ...s,
+      level: (s.riskLevel || s.level || 'LOW').toUpperCase(),
+      score: s.riskScore ?? s.score ?? 0,
+    }));
+    updateStats(_allStudents);
+    renderTable(_allStudents);
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function updateStats(students) {
+  document.getElementById('cnt-high').textContent   = students.filter(s=>s.level==='HIGH').length;
+  document.getElementById('cnt-medium').textContent = students.filter(s=>s.level==='MEDIUM').length;
+  document.getElementById('cnt-low').textContent    = students.filter(s=>s.level==='LOW').length;
+}
+
+function levelColor(l) {
+  return l==='HIGH'?'#EF4444':l==='MEDIUM'?'#F59E0B':'#10B981';
+}
+function trendClass(t) {
+  return t==='worsening'?'trend-up':t==='improving'?'trend-down':'trend-flat';
+}
+function trendIcon(t) {
+  return t==='worsening'?'↑ Worsening':t==='improving'?'↓ Improving':'→ Stable';
+}
+
+function renderTable(students) {
+  const tbody = document.getElementById('risk-tbody');
+  if (!students.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><i class="fas fa-users"></i><p>No students found</p></div></td></tr>`;
+    return;
+  }
+  const sorted = [...students].sort((a,b) => b.score - a.score);
+  tbody.innerHTML = sorted.map((s, i) => `
+    <tr>
+      <td style="color:var(--text-muted);font-size:12px;font-weight:600">${i+1}</td>
+      <td><span class="id-chip">${s.customId||'—'}</span></td>
+      <td style="font-weight:700">${s.name||'—'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${s.classId||s.className||'—'}</td>
+      <td>
+        <div class="risk-bar-wrap">
+          <div class="risk-bar-bg">
+            <div class="risk-bar-fill" style="width:${Math.min(s.score,100)}%;background:${levelColor(s.level)}"></div>
+          </div>
+          <span style="font-weight:800;font-size:13px;color:${levelColor(s.level)}">${s.score}</span>
+        </div>
+      </td>
+      <td><span class="level-badge level-${s.level.toLowerCase()}">${s.level}</span></td>
+      <td><span class="trend-pill ${trendClass(s.trend)}">${trendIcon(s.trend||'stable')}</span></td>
+      <td style="font-size:12px;color:var(--text-muted)">${s.counsellorName||'—'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="act-btn act-view" onclick='showDetail(${JSON.stringify(s)})'><i class="fas fa-eye"></i> View</button>
+          <button class="act-btn act-pdf"  onclick="downloadReport('${s.uid}')"><i class="fas fa-file-pdf"></i></button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filterRisk() {
+  const f = document.getElementById('risk-filter').value;
+  const filtered = f ? _allStudents.filter(s => s.level===f) : _allStudents;
+  renderTable(filtered);
+}
+
+function showDetail(s) {
+  const FMAP = {examScore:'Exam Marks',attendanceScore:'Attendance',submissionScore:'Assignments',quizScore:'Pulse Quiz',moodScore:'Mood',engagementScore:'Engagement',gradeScore:'Avg Grade'};
+  document.getElementById('detail-content').innerHTML=`
+    <div style="font-size:20px;font-weight:800;margin-bottom:2px">${s.name}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">${s.customId} · Class: ${s.classId||s.className||'—'}</div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;padding:20px;background:rgba(123,47,255,0.05);border-radius:14px">
+      <div style="font-size:56px;font-weight:900;line-height:1;color:${levelColor(s.level)}">${s.score}</div>
+      <div>
+        <span class="level-badge level-${s.level.toLowerCase()}" style="font-size:13px;padding:6px 14px">${s.level} RISK</span>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px">Trend: ${s.trend||'stable'}</div>
+        ${s.counsellorName?`<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Counsellor: ${s.counsellorName}</div>`:''}
+      </div>
+    </div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px">Factor Breakdown</div>
+    ${Object.entries(FMAP).map(([k,label])=>{
+      const v = s.breakdown?.[k] ?? 0;
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">${label}</span>
+          <span style="font-weight:700">${v}%</span>
+        </div>
+        <div style="height:6px;background:var(--divider);border-radius:3px">
+          <div style="width:${v}%;height:100%;background:${v>=75?'#10B981':v>=50?'#F59E0B':'#EF4444'};border-radius:3px"></div>
+        </div></div>`;
+    }).join('')}
+    <div style="font-weight:700;font-size:14px;margin:18px 0 10px">Recommendations</div>
+    ${(s.recommendations||['No specific recommendations at this time.']).map(r=>
+      `<div style="padding:10px 14px;background:rgba(123,47,255,0.07);border-left:3px solid #7B2FFF;border-radius:0 8px 8px 0;margin-bottom:7px;font-size:13px;color:var(--text-secondary)">• ${r}</div>`
+    ).join('')}`;
+  document.getElementById('detail-modal').style.display='flex';
+}
+function closeDetail() { document.getElementById('detail-modal').style.display='none'; }
+function downloadReport(uid) { openReport(`/api/reports/student/${uid}`); }
+
+async function recalcAll() {
+  showLoader('Recalculating all scores…');
+  for (const s of _allStudents) {
+    try { await apiCall(`/api/risk/recalculate/${s.uid}`,'POST'); } catch(_) {}
+  }
+  hideLoader();
+  showToast('All risk scores updated','success');
+  onPageReady();
+}
+</script>
+{% endblock %}

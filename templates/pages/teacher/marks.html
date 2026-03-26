@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Teacher Marks — EduPulse{% endblock %}
+{% block page_title %}Enter Marks{% endblock %}
+{% block content %}
+<div class="page-title">Mark Entry</div>
+<div class="page-subtitle">Enter and manage student marks</div>
+<div class="glass-card" style="padding:24px;margin-bottom:24px">
+  <div class="grid-2" style="gap:12px;margin-bottom:16px">
+    <div class="form-group"><label class="form-label">Class</label><select id="m-class" class="form-input" onchange="loadStudents()"><option value="">Select class</option></select></div>
+    <div class="form-group"><label class="form-label">Subject</label>
+      <div class="form-input" style="display:flex;align-items:center;gap:8px;background:rgba(123,47,255,0.08);cursor:default">
+        <i class="fas fa-book" style="color:#7B2FFF;font-size:13px"></i>
+        <span id="m-subj-name" style="font-weight:600;font-size:13px">—</span>
+        <input type="hidden" id="m-subj">
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Component</label>
+      <select id="m-comp" class="form-input"><option>midterm</option><option>finals</option><option>internal</option><option>practicals</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Max Marks</label><input id="m-max" type="number" class="form-input" value="100" min="1"></div>
+  </div>
+</div>
+<div id="marks-entry" style="display:none">
+  <div class="glass-card" style="padding:24px">
+    <div class="section-header">
+      <div class="section-title">Students</div>
+      <button class="btn btn-primary" onclick="saveMarks()"><i class="fas fa-save"></i> Save All</button>
+    </div>
+    <div id="student-marks-list" style="margin-top:16px"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let _students=[], _classes=[];
+async function onPageReady(){
+  const d=await apiCall('/api/teacher/classes');
+  _classes=d.classes||[];
+  const mySubject=(_classes[0]&&_classes[0].mySubject)||'';
+  document.getElementById('m-subj-name').textContent = mySubject||'Not assigned';
+  document.getElementById('m-subj').value = mySubject;
+  const sel=document.getElementById('m-class');
+  _classes.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name||c.classId;sel.appendChild(o);});
+}
+async function loadStudents(){
+  const cid=document.getElementById('m-class').value;
+  if(!cid)return;
+  const cls=_classes.find(c=>c.id===cid);
+  const d=await apiCall(`/api/teacher/classes/${cid}/students`);
+  _students=d.students||[];
+  document.getElementById('student-marks-list').innerHTML=_students.map(s=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--divider)">
+      <div>
+        <span style="font-weight:600;font-size:13px">${s.name}</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${s.customId}</span>
+      </div>
+      <input id="mks-${s.uid}" type="number" class="form-input" style="width:100px;padding:8px" placeholder="0" min="0">
+    </div>`).join('');
+  document.getElementById('marks-entry').style.display='block';
+}
+async function saveMarks(){
+  const cid  = document.getElementById('m-class').value;
+  const subj = document.getElementById('m-subj').value.trim();
+  const comp = document.getElementById('m-comp').value;
+  const max  = parseFloat(document.getElementById('m-max').value)||100;
+  if(!subj){ showToast('Subject not assigned to your profile','warning'); return; }
+  if(!cid){  showToast('Select a class','warning'); return; }
+  showLoader('Saving marks\u2026');
+  let saved=0, failed=0;
+  for(const s of _students){
+    const input = document.getElementById('mks-'+s.uid);
+    const val   = input ? parseFloat(input.value) : NaN;
+    if(isNaN(val)) continue;
+    try{
+      await apiCall('/api/teacher/marks','POST',{
+        studentId: s.uid,
+        subjectId: subj,
+        classId  : cid,
+        component: comp,
+        marks    : val,
+        maxMarks : max,
+      });
+      saved++;
+    }catch(err){ failed++; }
+  }
+  hideLoader();
+  if(failed) showToast(`Saved ${saved}, failed ${failed}`,'warning');
+  else       showToast(`Marks saved for ${saved} student(s)!`,'success');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Lecture Notes — EduPulse{% endblock %}
+{% block page_title %}Lecture Notes{% endblock %}
+{% block page_roles_check %}requireLogin();{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/teacher"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/notes"><i class="fas fa-sticky-note"></i>Notes</a>
+<a class="nav-link" href="/pages/attendance"><i class="fas fa-calendar-check"></i>Attendance</a>
+<a class="nav-link" href="/pages/assignments"><i class="fas fa-tasks"></i>Assignments</a>
+<a class="nav-link" href="/pages/marks"><i class="fas fa-star"></i>Marks</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Lecture Notes</div>
+<div class="page-subtitle">Access and manage lecture materials</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="search-bar" style="width:240px"><i class="fas fa-search"></i><input type="text" placeholder="Search notes..." id="notes-search" oninput="filterNotes(this.value)"></div>
+  <button class="btn btn-primary" id="upload-btn" style="display:none" onclick="openUploadModal()"><i class="fas fa-upload"></i>Upload Notes</button>
+</div>
+<div id="notes-grid" class="grid-auto">
+  <div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allNotes=[],mySubjects=[];
+async function onPageReady(user){
+  if(['subject_teacher','faculty_advisor','admin'].includes(user.role)){
+    document.getElementById('upload-btn').style.display='flex';
+    const sr=await apiCall('/api/teacher/subjects').catch(()=>({data:[]}));
+    mySubjects=sr.data||[];
+  }
+  await loadNotes(user.role);
+}
+async function loadNotes(role){
+  try{
+    let r;
+    if(role==='student') r=await apiCall('/api/student/notes');
+    else r=await apiCall('/api/teacher/lectures');
+    allNotes=r.data||[];renderNotes(allNotes);
+  }catch(e){showToast('Failed to load notes','error');}
+}
+function filterNotes(q){renderNotes(allNotes.filter(n=>(n.title||'').toLowerCase().includes(q.toLowerCase())));}
+function renderNotes(data){
+  const grid=document.getElementById('notes-grid');
+  if(!data.length){grid.innerHTML='<div style="grid-column:1/-1" class="empty-state"><i class="fas fa-sticky-note" style="font-size:48px"></i><h3>No notes found</h3><p>No lecture notes have been uploaded yet</p></div>';return;}
+  grid.innerHTML=data.map(n=>`
+    <div class="glass-card" style="padding:22px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7B2FFF,#A78BFA);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-file-alt" style="color:white;font-size:16px"></i>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">${n.date||'—'}</span>
+      </div>
+      <h3 style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">${n.title}</h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.5">${n.description||'No description'}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--text-muted)"><i class="fas fa-book-open" style="margin-right:4px"></i>${n.subjectName||n.subjectId||'General'}</span>
+        ${n.fileUrl?`<a href="${n.fileUrl}" target="_blank" class="btn btn-primary btn-sm"><i class="fas fa-download"></i>Download</a>`:''}
+      </div>
+    </div>`).join('');
+  if(window.reinitTilt)window.reinitTilt();
+}
+function openUploadModal(){
+  const opts=mySubjects.map(s=>`<option value="${s.id}|${s.classId}">${s.name}</option>`).join('');
+  openModal('Upload Lecture Notes',`
+    <div class="form-group"><label class="form-label">Subject</label><select class="form-input" id="m-subj">${opts||'<option>No subjects assigned</option>'}</select></div>
+    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="m-title" placeholder="Lecture title"></div>
+    <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="m-desc" rows="3" placeholder="What this lecture covers..."></textarea></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="m-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>`,async()=>{
+    const sv=document.getElementById('m-subj').value.split('|');
+    const title=document.getElementById('m-title').value.trim(),date=document.getElementById('m-date').value;
+    if(!title||!date||sv.length<2){showToast('All fields required','warning');return;}
+    showLoader();try{await apiCall('/api/teacher/lectures','POST',{title,description:document.getElementById('m-desc').value,date,subjectId:sv[0],classId:sv[1]});closeModal();showToast('Notes uploaded!','success');loadNotes(window.currentUser?.role);}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

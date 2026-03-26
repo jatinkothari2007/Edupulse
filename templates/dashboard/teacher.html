@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% block title %}Teacher Dashboard — EduPulse{% endblock %}
+{% block page_title %}Teacher Dashboard{% endblock %}
+{% block page_subtitle %}Attendance, marks, assignments and class management{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <div>
+    <h2 class="section-title">Welcome, <span id="teacher-name">Teacher</span> 👋</h2>
+    <p class="section-subtitle">Today's class summary and pending actions.</p>
+  </div>
+  <a href="/pages/teacher/attendance" class="btn btn-primary">
+    <i class="fas fa-calendar-check"></i> Take Attendance
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(244,114,182,0.12)">
+      <i class="fas fa-chalkboard" style="color:#F472B6"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-classes"><div class="skeleton" style="height:28px;width:44px"></div></div>
+      <div class="stat-label">My Classes</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)">
+      <i class="fas fa-users" style="color:#7B2FFF"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-students"><div class="skeleton" style="height:28px;width:44px"></div></div>
+      <div class="stat-label">Total Students</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)">
+      <i class="fas fa-check-double" style="color:#10B981"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-avg-attendance"><div class="skeleton" style="height:28px;width:56px"></div></div>
+      <div class="stat-label">Avg Attendance</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)">
+      <i class="fas fa-tasks" style="color:#F59E0B"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-pending"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">Pending Assignments</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="two-col">
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Attendance Trend</p><p class="card-subtitle">Last 7 days average %</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="attendance-chart"></canvas></div>
+    </div>
+  </div>
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Marks Distribution</p><p class="card-subtitle">Latest assessment scores</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="marks-chart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick actions + Recent classes -->
+<div class="two-col-wide-r">
+  <div class="glass-card">
+    <div class="card-header"><p class="card-title">Quick Actions</p></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+      <a href="/pages/teacher/attendance"  class="btn btn-primary">   <i class="fas fa-calendar-check"></i> Take Attendance</a>
+      <a href="/pages/teacher/marks"       class="btn btn-secondary"> <i class="fas fa-star"></i>            Enter Marks</a>
+      <a href="/pages/teacher/assignments" class="btn btn-ghost">     <i class="fas fa-tasks"></i>           Assignments</a>
+      <a href="/pages/teacher/notes"       class="btn btn-ghost">     <i class="fas fa-sticky-note"></i>     Upload Notes</a>
+    </div>
+  </div>
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">My Classes</p><p class="card-subtitle">All assigned classes</p></div>
+      <a href="/pages/teacher/classes" class="btn btn-ghost btn-sm">View All</a>
+    </div>
+    <div class="card-body" style="padding-top:0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Class</th><th>Students</th><th>Attendance %</th></tr></thead>
+          <tbody id="classes-body">
+            <tr><td colspan="3"><div class="skeleton skeleton-row"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton skeleton-row"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _attChart = null, _marksChart = null;
+
+waitForAuth().then(user => {
+  if (!user) { window.location.href='/'; return; }
+  document.getElementById('teacher-name').textContent = (user.name||'Teacher').split(' ')[0];
+  listenNotifications(user.uid);
+  loadTeacherDashboard(user);
+});
+
+async function loadTeacherDashboard(user) {
+  try {
+    const [classRes, attRes] = await Promise.all([
+      cachedApiCall('/api/teacher/classes','GET',null,90).catch(()=>({classes:[]})),
+      cachedApiCall('/api/teacher/attendance-summary','GET',null,90).catch(()=>({trend:[],avg:0,classAttendance:{}}))
+    ]);
+
+    const classes     = classRes.classes || [];
+    const trend       = attRes.trend     || [];
+    const classAtt    = attRes.classAttendance || {};
+    const pending     = 0;
+    const total       = classes.reduce((a,c)=>a+(c.studentCount||(c.students||[]).length||0),0);
+
+    /* Compute avg from same source as the table so both numbers match */
+    const totPresent = Object.values(classAtt).reduce((a,v)=>a+v.present,0);
+    const totRecords = Object.values(classAtt).reduce((a,v)=>a+v.total,0);
+    const avgPct     = totRecords ? Math.round(totPresent/totRecords*100) : (attRes.avg||0);
+
+    document.getElementById('stat-classes').textContent         = classes.length;
+    document.getElementById('stat-students').textContent        = total;
+    document.getElementById('stat-avg-attendance').textContent  = avgPct ? avgPct.toFixed(0)+'%' : '—';
+    document.getElementById('stat-pending').textContent         = pending;
+
+    renderAttendanceChart(trend);
+
+    /* Fetch marks and compute distribution */
+    const mRes  = await cachedApiCall('/api/teacher/marks','GET',null,90).catch(()=>({marks:[]}));
+    const mList = mRes.marks || [];
+    const buckets = [0,0,0,0,0];   /* 0-20, 21-40, 41-60, 61-80, 81-100 */
+    mList.forEach(m => {
+      const pct = m.maxMarks ? Math.round((m.marks / m.maxMarks) * 100) : m.marks;
+      if      (pct <= 20)  buckets[0]++;
+      else if (pct <= 40)  buckets[1]++;
+      else if (pct <= 60)  buckets[2]++;
+      else if (pct <= 80)  buckets[3]++;
+      else                 buckets[4]++;
+    });
+    renderMarksChart(buckets);
+    renderClassesTable(classes, classAtt);
+  } catch(e) { showToast('Dashboard load error: '+e.message,'error'); }
+}
+
+function renderAttendanceChart(trend) {
+  const ctx = document.getElementById('attendance-chart');
+  if (!ctx) return;
+  if (_attChart) _attChart.destroy();
+  const labels = trend.length ? trend.map(t=>t.date||t.label||'') : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const data   = trend.length ? trend.map(t=>t.pct ?? t.avg ?? t.value ?? 0) : [0,0,0,0,0,0,0];
+  _attChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'Attendance %', data,
+        borderColor:'#7B2FFF', backgroundColor:'rgba(123,47,255,0.10)',
+        borderWidth:2.5, fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#7B2FFF'
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'var(--divider)'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderMarksChart(dist) {
+  const ctx = document.getElementById('marks-chart');
+  if (!ctx) return;
+  if (_marksChart) _marksChart.destroy();
+  _marksChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:['0-20','21-40','41-60','61-80','81-100'],
+      datasets:[{
+        label:'Students',
+        data: dist.length ? dist : [0,0,0,0,0],
+        backgroundColor:['rgba(239,68,68,0.7)','rgba(245,158,11,0.7)','rgba(96,165,250,0.7)','rgba(45,212,191,0.7)','rgba(16,185,129,0.7)'],
+        borderRadius:8, borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'var(--divider)'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderClassesTable(classes, classAtt) {
+  classAtt = classAtt || {};
+  const tbody = document.getElementById('classes-body');
+  if (!classes.length) {
+    tbody.innerHTML='<tr><td colspan="3"><div class="empty-state"><i class="fas fa-chalkboard"></i><p>No classes assigned</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = classes.map(c=>{
+    const cid  = c.id || c.classId || '';
+    const att  = classAtt[cid];
+    const pct  = att && att.total ? Math.round(att.present / att.total * 100) : (c.attendancePct || 0);
+    const name = c.name || c.className || c.classId || '—';
+    const cnt  = c.studentCount || (c.students||[]).length || 0;
+    return `
+    <tr>
+      <td style="font-weight:600">${name}</td>
+      <td>${cnt}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--divider);border-radius:3px">
+            <div style="height:100%;width:${pct}%;background:${pct>75?'#10B981':'#EF4444'};border-radius:3px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}Attendance — EduPulse{% endblock %}
+{% block page_title %}Mark Attendance{% endblock %}
+{% block content %}
+<div class="page-title">Mark Attendance</div>
+<div class="page-subtitle">Select class and date to mark attendance for your subject</div>
+
+<div class="glass-card" style="padding:24px;margin-bottom:24px">
+  <div class="grid-2" style="gap:16px;margin-bottom:16px">
+    <div class="form-group">
+      <label class="form-label">Class</label>
+      <select id="att-class" class="form-input" onchange="onClassChange()">
+        <option value="">Select class</option>
+      </select>
+    </div>
+    <!-- Subject is auto-assigned from teacher profile — shown as read-only badge -->
+    <div class="form-group">
+      <label class="form-label">Subject</label>
+      <div id="att-subject-display" class="form-input" style="display:flex;align-items:center;gap:8px;background:rgba(123,47,255,0.08);cursor:default">
+        <i class="fas fa-book" style="color:#7B2FFF;font-size:13px"></i>
+        <span id="att-subject-name" style="font-weight:600;font-size:13px;color:var(--text-primary)">—</span>
+        <input type="hidden" id="att-subject">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input id="att-date" type="date" class="form-input">
+    </div>
+    <div style="display:flex;align-items:flex-end">
+      <button class="btn btn-primary" onclick="loadStudents()" style="width:100%">
+        <i class="fas fa-users"></i> Load Students
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="att-student-section" style="display:none">
+  <div class="glass-card" style="padding:24px">
+    <div class="section-header">
+      <div class="section-title">Students</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-secondary" onclick="markAll('present')">All Present</button>
+        <button class="btn btn-sm btn-danger"    onclick="markAll('absent')">All Absent</button>
+        <button class="btn btn-sm btn-primary"   onclick="submitAttendance()"><i class="fas fa-save"></i> Save</button>
+      </div>
+    </div>
+    <div id="att-list" style="margin-top:16px"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _classStudents = [];
+var _classes       = [];
+var _mySubject     = '';   /* teacher's assigned subject — set on page load */
+
+async function onPageReady(user) {
+  document.getElementById('att-date').value = new Date().toISOString().slice(0,10);
+
+  const params   = new URLSearchParams(window.location.search);
+  const urlClass = params.get('classId');
+
+  const cdata = await apiCall('/api/teacher/classes');
+  _classes    = cdata.classes || [];
+
+  /* The first class carries mySubject for this teacher */
+  _mySubject  = (_classes[0] && _classes[0].mySubject) || user.subject || '';
+  document.getElementById('att-subject-name').textContent = _mySubject || 'Not assigned';
+  document.getElementById('att-subject').value            = _mySubject;
+
+  const sel = document.getElementById('att-class');
+  _classes.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = c.name || c.className || c.classId;
+    sel.appendChild(opt);
+  });
+
+  if (urlClass) { sel.value = urlClass; onClassChange(); }
+}
+
+function onClassChange() {
+  /* Subject is fixed — no dropdown to update */
+}
+
+async function loadStudents() {
+  const cid  = document.getElementById('att-class').value;
+  const sid  = document.getElementById('att-subject').value;
+  const date = document.getElementById('att-date').value;
+  if (!cid) { showToast('Select a class', 'warning'); return; }
+  if (!sid) { showToast('Your subject is not assigned yet', 'warning'); return; }
+  if (!date){ showToast('Select a date', 'warning'); return; }
+
+  const [sdata, existing] = await Promise.all([
+    apiCall(`/api/teacher/classes/${cid}/students`),
+    apiCall(`/api/teacher/attendance/${cid}/${sid}/${date}`).catch(()=>({records:[]}))
+  ]);
+  _classStudents = sdata.students || [];
+  const existMap = {};
+  (existing.records||[]).forEach(r=>{ existMap[r.studentId||r.studentUid]=r.status; });
+
+  document.getElementById('att-list').innerHTML = _classStudents.map(s=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--divider)">
+      <div>
+        <span style="font-weight:600;font-size:13px">${s.name}</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${s.customId}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${['present','late','absent'].map(st=>`
+          <button class="att-btn" data-uid="${s.uid}" data-status="${st}" onclick="selectStatus('${s.uid}','${st}')"
+            style="padding:6px 14px;border-radius:20px;border:2px solid ${st==='present'?'#10B981':st==='late'?'#F59E0B':'#EF4444'};
+                   background:${existMap[s.uid]===st?(st==='present'?'rgba(16,185,129,0.2)':st==='late'?'rgba(245,158,11,0.2)':'rgba(239,68,68,0.2)'):'transparent'};
+                   color:${st==='present'?'#10B981':st==='late'?'#F59E0B':'#EF4444'};cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s">
+            ${st.charAt(0).toUpperCase()+st.slice(1)}
+          </button>`).join('')}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('att-student-section').style.display = 'block';
+}
+
+function selectStatus(uid, status) {
+  document.querySelectorAll(`[data-uid="${uid}"]`).forEach(btn => {
+    const st = btn.dataset.status;
+    btn.style.background = status===st
+      ? `rgba(${st==='present'?'16,185,129':st==='late'?'245,158,11':'239,68,68'},0.2)`
+      : 'transparent';
+  });
+}
+
+function markAll(status) {
+  _classStudents.forEach(s => selectStatus(s.uid, status));
+}
+
+async function submitAttendance() {
+  const cid  = document.getElementById('att-class').value;
+  const sid  = document.getElementById('att-subject').value;
+  const date = document.getElementById('att-date').value;
+  const records = _classStudents.map(s => {
+    const activeBtn = document.querySelector(`[data-uid="${s.uid}"][style*="rgba"]`);
+    return { studentUid: s.uid, status: activeBtn ? activeBtn.dataset.status : 'absent' };
+  });
+  try {
+    showLoader('Saving attendance…');
+    await apiCall('/api/teacher/attendance','POST',{classId:cid,subjectId:sid,date,records});
+    showToast('Attendance saved!','success');
+  } catch(e){ showToast(e.message,'error'); } finally { hideLoader(); }
+}
+</script>
+{% endblock %}

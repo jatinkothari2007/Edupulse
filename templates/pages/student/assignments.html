@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% block title %}Assignments — EduPulse{% endblock %}
+{% block page_title %}Assignments{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Drive Link Modal ────────────────────────────── */
+.drive-modal-overlay {
+  position:fixed;inset:0;background:rgba(0,0,0,0.70);backdrop-filter:blur(6px);
+  z-index:9999;display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+.drive-modal-overlay.open { opacity:1; pointer-events:all; }
+.drive-modal {
+  background:var(--glass-bg,rgba(15,10,30,0.97));
+  border:1px solid rgba(123,47,255,0.25);
+  border-radius:22px;padding:32px;width:min(480px,94vw);
+  box-shadow:0 24px 64px rgba(0,0,0,0.6);
+  transform:translateY(24px) scale(0.97);
+  transition:transform .22s cubic-bezier(.34,1.56,.64,1);
+}
+.drive-modal-overlay.open .drive-modal { transform:translateY(0) scale(1); }
+
+.drive-modal-icon {
+  width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(135deg,#4285F4,#34A853);
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;color:#fff;margin:0 auto 16px;
+  box-shadow:0 8px 24px rgba(66,133,244,0.35);
+}
+.drive-modal h3 {
+  text-align:center;font-size:18px;font-weight:800;margin-bottom:4px;
+}
+.drive-modal .asgn-name {
+  text-align:center;font-size:13px;color:var(--text-muted);
+  margin-bottom:24px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.drive-input-wrap { position:relative;margin-bottom:8px; }
+.drive-input-wrap .drive-icon {
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:#4285F4;font-size:16px;pointer-events:none;
+}
+.drive-input {
+  width:100%;box-sizing:border-box;
+  padding:12px 14px 12px 42px;
+  border-radius:12px;border:1.5px solid rgba(123,47,255,0.2);
+  background:rgba(15,10,30,0.7);color:var(--text-primary);
+  font-size:13px;transition:border-color .15s;outline:none;
+}
+.drive-input:focus { border-color:#4285F4; }
+.drive-input.error { border-color:#EF4444!important;animation:shake .3s; }
+@keyframes shake {
+  0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}
+}
+.drive-hint { font-size:11px;color:var(--text-muted);margin-bottom:20px; }
+.drive-hint a { color:#4285F4;text-decoration:none; }
+.drive-error { font-size:12px;color:#EF4444;margin-bottom:12px;display:none; }
+.drive-modal-btns { display:flex;gap:10px; }
+.drive-modal-btns .btn { flex:1;padding:12px;border-radius:12px;font-weight:700;font-size:14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Assignments</div>
+<div class="page-subtitle">Submit your coursework and track your grades</div>
+<div class="grid-4" style="margin-bottom:24px" id="asgn-stats">
+  <div class="skeleton" style="height:70px"></div><div class="skeleton" style="height:70px"></div>
+  <div class="skeleton" style="height:70px"></div><div class="skeleton" style="height:70px"></div>
+</div>
+<div class="glass-card" style="padding:24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="section-title" style="margin:0">All Assignments</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="asgn-filter" class="form-input" style="width:140px;padding:8px 12px;font-size:13px" onchange="filterAsgn()">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="submitted">Completed</option>
+      </select>
+      <input id="asgn-search" class="form-input" placeholder="🔍  Search…"
+        style="width:200px;padding:8px 12px;font-size:13px" oninput="filterAsgn()">
+    </div>
+  </div>
+  <div id="asgn-table"><div class="skeleton" style="height:200px"></div></div>
+</div>
+
+<!-- ── Drive Link Submission Modal ───────────────── -->
+<div class="drive-modal-overlay" id="drive-overlay" onclick="closeDriveModal(event)">
+  <div class="drive-modal" onclick="event.stopPropagation()">
+    <div class="drive-modal-icon"><i class="fab fa-google-drive"></i></div>
+    <h3>Submit Assignment</h3>
+    <div class="asgn-name" id="dm-title">—</div>
+
+    <div class="drive-input-wrap">
+      <i class="fas fa-link drive-icon"></i>
+      <input id="dm-link" class="drive-input" type="url"
+        placeholder="Paste your Google Drive link here…"
+        oninput="clearDriveError()">
+    </div>
+    <div class="drive-error" id="dm-error"></div>
+    <div class="drive-hint">
+      Must be a shareable Google Drive link
+      (<a href="https://drive.google.com" target="_blank">drive.google.com</a>).
+      Make sure sharing is set to <strong>"Anyone with the link"</strong>.
+    </div>
+
+    <div class="drive-modal-btns">
+      <button class="btn btn-ghost" onclick="closeDriveModal()">Cancel</button>
+      <button class="btn btn-primary" id="dm-submit-btn" onclick="confirmDriveSubmit()">
+        <i class="fas fa-paper-plane"></i> Submit
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _allAsgn = [];
+var _dmAid   = null;
+
+/* ── Render table ──────────────────────────────────────────────────────────── */
+function renderAsgnTable(asms) {
+  var el = document.getElementById('asgn-table');
+  if (!asms.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-tasks"></i><p>No assignments found</p></div>';
+    return;
+  }
+  var today = new Date().toISOString().slice(0,10);
+  var rows = asms.map(function(a, i) {
+    var submitted = (a.submissionStatus === 'submitted');
+    var overdue   = (!submitted && a.dueDate < today);
+    var bg        = i%2===0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+    var stClr     = submitted ? '#10B981' : overdue ? '#EF4444' : '#F59E0B';
+    var stIcon    = submitted ? 'fa-check-circle' : overdue ? 'fa-exclamation-circle' : 'fa-clock';
+    var stLabel   = submitted ? 'Completed' : overdue ? 'Overdue' : 'Pending';
+    var driveLink = a.submissionUrl || a.fileUrl || '';
+    var actionCol = submitted
+      ? (driveLink
+          ? '<a href="'+driveLink+'" target="_blank" style="color:#4285F4;font-size:12px;display:inline-flex;align-items:center;gap:4px"><i class="fab fa-google-drive"></i> View</a>'
+          : '<span style="color:var(--text-muted);font-size:12px">—</span>')
+      : '<button onclick="openDriveModal(\''+a.id+'\',\''+encodeURIComponent(a.title||'')+'\')" class="btn btn-sm btn-primary"><i class="fas fa-upload"></i> Submit</button>';
+    return '<tr style="background:'+bg+';transition:background 0.15s"'
+      +' onmouseover="this.style.background=\'rgba(123,47,255,0.07)\'"'
+      +' onmouseout="this.style.background=\''+bg+'\'">'
+      +'<td style="padding:11px 14px;text-align:center;color:var(--text-muted);font-size:12px">'+(i+1)+'</td>'
+      +'<td style="padding:11px 14px;font-weight:600;font-size:13px;max-width:200px">'
+        +'<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(a.title||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">'+(a.description||'').slice(0,60)+'</div>'
+      +'</td>'
+      +'<td style="padding:11px 14px;font-size:13px">'+(a.subject||a.subjectId||'—')+'</td>'
+      +'<td style="padding:11px 14px;font-size:13px;'+(overdue?'color:#EF4444;font-weight:600':'')+'">'+(a.dueDate||'—')+'</td>'
+      +'<td style="padding:11px 14px;text-align:center;font-weight:700;color:'+(a.marks!=null?'#7B2FFF':'var(--text-muted)')+';">'
+        +(a.marks!=null ? a.marks+'/'+a.maxMarks : '—')
+      +'</td>'
+      +'<td style="padding:11px 14px">'
+        +'<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;color:'+stClr+';background:'+stClr+'18;border:1px solid '+stClr+'33">'
+          +'<i class="fas '+stIcon+'" style="font-size:10px"></i>'+stLabel
+        +'</span>'
+      +'</td>'
+      +'<td style="padding:11px 14px;text-align:center">'+actionCol+'</td>'
+      +'</tr>';
+  }).join('');
+
+  el.innerHTML = '<div style="border-radius:14px;overflow:hidden;border:1px solid var(--card-border)">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:rgba(123,47,255,0.12);border-bottom:2px solid var(--card-border)">'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center;width:40px">#</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Title</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted)">Subject</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted)">Due Date</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Score</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted)">Status</th>'
+    +'<th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Action</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div>';
+}
+
+/* ── Load data ─────────────────────────────────────────────────────────────── */
+async function _loadAsgn() {
+  try {
+    var d = await apiCall('/api/student/assignments');
+    _allAsgn = d.assignments || [];
+    var pending   = _allAsgn.filter(function(a){return a.submissionStatus==='pending';}).length;
+    var submitted = _allAsgn.filter(function(a){return a.submissionStatus==='submitted';}).length;
+    var graded    = _allAsgn.filter(function(a){return a.marks!=null;}).length;
+    document.getElementById('asgn-stats').innerHTML =
+      '<div class="stat-card"><div class="stat-icon" style="background:rgba(123,47,255,0.12)"><i class="fas fa-list" style="color:#7B2FFF"></i></div><div class="stat-info"><div class="stat-value">'+_allAsgn.length+'</div><div class="stat-label">Total</div></div></div>'
+      +'<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-clock" style="color:#F59E0B"></i></div><div class="stat-info"><div class="stat-value">'+pending+'</div><div class="stat-label">Pending</div></div></div>'
+      +'<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-check-circle" style="color:#10B981"></i></div><div class="stat-info"><div class="stat-value">'+submitted+'</div><div class="stat-label">Completed</div></div></div>'
+      +'<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.12)"><i class="fas fa-star" style="color:#3B82F6"></i></div><div class="stat-info"><div class="stat-value">'+graded+'</div><div class="stat-label">Graded</div></div></div>';
+    renderAsgnTable(_allAsgn);
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function filterAsgn() {
+  var status   = document.getElementById('asgn-filter').value;
+  var term     = document.getElementById('asgn-search').value.toLowerCase();
+  var filtered = _allAsgn.filter(function(a) {
+    return (!status || a.submissionStatus===status) &&
+           (!term   || (a.title||'').toLowerCase().includes(term) || (a.subjectId||'').toLowerCase().includes(term));
+  });
+  renderAsgnTable(filtered);
+}
+
+/* ── Drive Link Modal ──────────────────────────────────────────────────────── */
+function openDriveModal(aid, encodedTitle) {
+  _dmAid = aid;
+  document.getElementById('dm-title').textContent = decodeURIComponent(encodedTitle);
+  document.getElementById('dm-link').value = '';
+  document.getElementById('dm-error').style.display = 'none';
+  document.getElementById('dm-link').classList.remove('error');
+  document.getElementById('drive-overlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('dm-link').focus(); }, 200);
+}
+
+function closeDriveModal(e) {
+  if (e && e.target !== document.getElementById('drive-overlay')) return;
+  document.getElementById('drive-overlay').classList.remove('open');
+  _dmAid = null;
+}
+
+function clearDriveError() {
+  document.getElementById('dm-error').style.display = 'none';
+  document.getElementById('dm-link').classList.remove('error');
+}
+
+function showDriveError(msg) {
+  var el = document.getElementById('dm-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('dm-link').classList.add('error');
+}
+
+async function confirmDriveSubmit() {
+  var link = document.getElementById('dm-link').value.trim();
+
+  /* Validation — mandatory */
+  if (!link) {
+    showDriveError('Please paste your Google Drive link before submitting.');
+    return;
+  }
+  /* Must look like a valid URL with drive.google.com */
+  if (!link.startsWith('http')) {
+    showDriveError('Link must start with http:// or https://');
+    return;
+  }
+  if (!link.includes('drive.google.com') && !link.includes('docs.google.com')) {
+    showDriveError('Please provide a valid Google Drive or Google Docs link.');
+    return;
+  }
+
+  var btn = document.getElementById('dm-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…';
+
+  try {
+    await apiCall('/api/student/assignments/'+_dmAid+'/submit', 'POST', {
+      fileName : 'Drive Submission',
+      fileUrl  : link,
+      driveLink: link,
+    });
+    document.getElementById('drive-overlay').classList.remove('open');
+    showToast('Assignment submitted successfully! ✅', 'success');
+    _dmAid = null;
+    await _loadAsgn();   /* refresh table — status now shows Completed */
+  } catch(err) {
+    showDriveError(err.message || 'Submission failed. Try again.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit';
+  }
+}
+
+/* ── Boot ──────────────────────────────────────────────────────────────────── */
+function onPageReady() { return _loadAsgn(); }
+waitForAuth().then(function(u) { if (u) _loadAsgn(); });
+
+window.onPageReady      = onPageReady;
+window.filterAsgn       = filterAsgn;
+window.openDriveModal   = openDriveModal;
+window.closeDriveModal  = closeDriveModal;
+window.clearDriveError  = clearDriveError;
+window.confirmDriveSubmit = confirmDriveSubmit;
+</script>
+{% endblock %}

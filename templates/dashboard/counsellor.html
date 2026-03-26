@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% block title %}Counsellor Dashboard — EduPulse{% endblock %}
+{% block page_title %}Counsellor Dashboard{% endblock %}
+{% block page_subtitle %}Student wellbeing, sessions and case management{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <div>
+    <h2 class="section-title">Welcome, <span id="counsellor-name">Counsellor</span> 👋</h2>
+    <p class="section-subtitle">Manage assigned students and track their wellbeing.</p>
+  </div>
+  <a href="/pages/counsellor/sessions" class="btn btn-primary">
+    <i class="fas fa-video"></i> Schedule Session
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid-3">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(96,165,250,0.12)">
+      <i class="fas fa-users" style="color:#60A5FA"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-students"><div class="skeleton" style="height:28px;width:44px"></div></div>
+      <div class="stat-label">My Students</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)">
+      <i class="fas fa-exclamation-triangle" style="color:#EF4444"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-high-risk"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">High Risk Assigned</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)">
+      <i class="fas fa-video" style="color:#10B981"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-sessions"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">Sessions This Week</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="two-col">
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Risk Level Overview</p><p class="card-subtitle">Assigned students by risk</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="risk-overview-chart"></canvas></div>
+    </div>
+  </div>
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Monthly Sessions</p><p class="card-subtitle">Sessions completed per month</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="sessions-chart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- My students table -->
+<div class="glass-card full-width">
+  <div class="card-header">
+    <div><p class="card-title">My Students</p><p class="card-subtitle">All assigned students and their risk status</p></div>
+    <a href="/pages/counsellor/students" class="btn btn-ghost btn-sm">View All</a>
+  </div>
+  <div class="card-body" style="padding-top:0">
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>ID</th><th>Risk Score</th><th>Risk Level</th><th>Last Session</th><th>Action</th></tr></thead>
+        <tbody id="students-body">
+          <tr><td colspan="6"><div class="skeleton skeleton-row"></div></td></tr>
+          <tr><td colspan="6"><div class="skeleton skeleton-row"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _riskChrt = null, _sessChrt = null;
+
+waitForAuth().then(user => {
+  if (!user) { window.location.href='/'; return; }
+  document.getElementById('counsellor-name').textContent = (user.name||'Counsellor').split(' ')[0];
+  listenNotifications(user.uid);
+  loadCounsellorDashboard(user);
+});
+
+async function loadCounsellorDashboard(user) {
+  try {
+    const [studRes, sessRes] = await Promise.all([
+      cachedApiCall('/api/counsellor/students','GET',null,90).catch(()=>({students:[]})),
+      cachedApiCall('/api/counsellor/sessions','GET',null,90).catch(()=>({sessions:[]}))
+    ]);
+
+    const students = studRes.students || studRes || [];
+    const sessions = sessRes.sessions || sessRes || [];
+
+    const highRisk = Array.isArray(students) ? students.filter(s=>(s.level||s.riskLevel||'').toUpperCase()==='HIGH') : [];
+    const weekSess = Array.isArray(sessions) ? sessions.filter(s=>isThisWeek(s.date||s.scheduledAt)) : [];
+
+    document.getElementById('stat-students').textContent  = Array.isArray(students)?students.length:0;
+    document.getElementById('stat-high-risk').textContent = highRisk.length;
+    document.getElementById('stat-sessions').textContent  = weekSess.length;
+
+    renderRiskOverview(Array.isArray(students)?students:[]);
+    renderSessionsChart(Array.isArray(sessions)?sessions:[]);
+    renderStudentsTable(Array.isArray(students)?students:[]);
+  } catch(e) { showToast('Dashboard load error: '+e.message,'error'); }
+}
+
+function isThisWeek(dateVal) {
+  if (!dateVal) return false;
+  const d = new Date(dateVal._seconds ? dateVal._seconds*1000 : dateVal);
+  const now = new Date();
+  const start = new Date(now); start.setDate(now.getDate()-now.getDay());
+  start.setHours(0,0,0,0);
+  return d >= start;
+}
+
+function renderRiskOverview(students) {
+  const ctx = document.getElementById('risk-overview-chart');
+  if (!ctx) return;
+  if (_riskChrt) _riskChrt.destroy();
+  const lvl = s => (s.level || s.riskLevel || '').toUpperCase();
+  const low=students.filter(s=>lvl(s)==='LOW').length;
+  const med=students.filter(s=>lvl(s)==='MEDIUM').length;
+  const hi =students.filter(s=>lvl(s)==='HIGH').length;
+  _riskChrt = new Chart(ctx,{
+    type:'doughnut',
+    data:{
+      labels:['Low','Medium','High'],
+      datasets:[{
+        data:[low,med,hi],
+        backgroundColor:['rgba(16,185,129,0.75)','rgba(245,158,11,0.75)','rgba(239,68,68,0.75)'],
+        borderColor:['#10B981','#F59E0B','#EF4444'], borderWidth:2, hoverOffset:6
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:true,aspectRatio:1.8,cutout:'65%',
+      plugins:{legend:{position:'bottom',labels:{padding:16,font:{size:12}}}}}
+  });
+}
+
+function renderSessionsChart(sessions) {
+  const ctx = document.getElementById('sessions-chart');
+  if (!ctx) return;
+  if (_sessChrt) _sessChrt.destroy();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const counts  = new Array(12).fill(0);
+  sessions.forEach(s=>{
+    const d=new Date(s.date?._seconds?s.date._seconds*1000:s.date||0);
+    if (!isNaN(d)) counts[d.getMonth()]++;
+  });
+  const now=new Date().getMonth();
+  const labels = months.slice(Math.max(0,now-5),now+1);
+  const data   = counts.slice(Math.max(0,now-5),now+1);
+  _sessChrt = new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[{label:'Sessions',data,backgroundColor:'rgba(96,165,250,0.7)',borderRadius:8,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:true,aspectRatio:1.8,
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'var(--divider)'}},x:{grid:{display:false}}}}
+  });
+}
+
+function renderStudentsTable(students) {
+  const tbody = document.getElementById('students-body');
+  if (!students.length) {
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><i class="fas fa-users"></i><p>No students assigned</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = students.slice(0,15).map(s=>`
+    <tr>
+      <td style="font-weight:600">${s.name||'—'}</td>
+      <td class="mono-text">${s.customId||'—'}</td>
+      <td style="font-weight:700;color:${(s.level||s.riskLevel||'').toUpperCase()==='HIGH'?'#EF4444':(s.level||s.riskLevel||'').toUpperCase()==='MEDIUM'?'#F59E0B':'#10B981'}">${s.score||s.riskScore||'—'}</td>
+      <td><span class="badge badge-${(s.level||s.riskLevel||'low').toLowerCase()}">${s.level||s.riskLevel||'—'}</span></td>
+      <td style="color:var(--text-muted);font-size:12px">${s.lastSession||'Never'}</td>
+      <td>
+        <a href="/pages/counsellor/sessions?student=${s.uid||''}" class="btn-icon" title="Schedule Session">
+          <i class="fas fa-video"></i>
+        </a>
+      </td>
+    </tr>`).join('');
+}
+</script>
+{% endblock %}

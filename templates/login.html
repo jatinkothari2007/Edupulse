@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduPulse — Login</title>
+<meta name="description" content="EduPulse Login — Secure role-based access">
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/3d-liquid-glass.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+</head>
+<body>
+<canvas id="particle-canvas"></canvas>
+
+<div class="login-page">
+  <div class="login-card glass-card" data-tilt>
+
+    <!-- Back button -->
+    <a href="/" class="login-back-btn">
+      <i class="fas fa-arrow-left"></i> Back to Portal
+    </a>
+
+    <!-- Role badge -->
+    <div id="role-display" class="role-display">
+      <div class="role-icon-mini" id="role-icon-mini">
+        <i class="fas fa-circle-user"></i>
+      </div>
+      <div>
+        <div class="role-label" id="role-label">Select a role</div>
+        <div class="role-sublabel" id="role-sublabel">Not your role? Go back</div>
+      </div>
+    </div>
+
+    <div class="login-header">
+      <div class="login-logo">
+        <span class="edu">Edu</span><span class="pulse">Pulse</span>
+      </div>
+      <p class="login-tagline">Sign in to your account</p>
+    </div>
+
+    <!-- Theme toggle -->
+    <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn" style="align-self:flex-end;margin-bottom:8px">
+      <i id="theme-icon" class="fas fa-moon"></i>
+      <span id="theme-label">Dark</span>
+    </button>
+
+    <form id="login-form" onsubmit="handleLogin(event)" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="email-input">
+          <i class="fas fa-envelope" style="margin-right:6px;color:var(--purple-primary)"></i>
+          Email Address
+        </label>
+        <input id="email-input" type="email" class="form-input" placeholder="your@email.com" required autocomplete="email">
+      </div>
+      <div class="form-group" style="position:relative">
+        <label class="form-label" for="password-input">
+          <i class="fas fa-lock" style="margin-right:6px;color:var(--purple-primary)"></i>
+          Password
+        </label>
+        <input id="password-input" type="password" class="form-input" placeholder="••••••••" required autocomplete="current-password" style="padding-right:48px">
+        <button type="button" class="pwd-toggle" id="pwd-toggle" onclick="togglePassword()">
+          <i class="fas fa-eye" id="pwd-eye"></i>
+        </button>
+      </div>
+
+      <div id="login-error" class="login-error" style="display:none"></div>
+
+      <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:14px">
+        <i class="fas fa-sign-in-alt"></i>
+        Sign In
+      </button>
+    </form>
+
+    <p class="login-footer">
+      EduPulse &copy; 2026 &mdash; Academic Risk Detection System
+    </p>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="{{ url_for('static', filename='js/particles.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tilt3d.js') }}"></script>
+<script src="{{ url_for('static', filename='js/firebase-init.js') }}"></script>
+
+<script>
+const ROLE_META = {
+  admin:          { label:'Admin',           sub:'System Administrator',   icon:'fa-shield-alt',         bg:'linear-gradient(135deg,#EF4444,#F87171)' },
+  faculty_advisor:{ label:'Faculty Advisor', sub:'Class & Risk Management',icon:'fa-user-tie',            bg:'linear-gradient(135deg,#F59E0B,#FBBF24)' },
+  counsellor:     { label:'Counsellor',      sub:'Student Wellbeing',      icon:'fa-heart-pulse',         bg:'linear-gradient(135deg,#3B82F6,#60A5FA)' },
+  subject_teacher:{ label:'Subject Teacher', sub:'Attendance & Marks',     icon:'fa-chalkboard-teacher',  bg:'linear-gradient(135deg,#10B981,#34D399)'  },
+  student:        { label:'Student',         sub:'Dashboard & Progress',   icon:'fa-graduation-cap',      bg:'linear-gradient(135deg,#7B2FFF,#A78BFA)'  },
+};
+
+const ROLE_DASHBOARD = {
+  admin:          '/dashboard/admin',
+  faculty_advisor:'/dashboard/faculty',
+  counsellor:     '/dashboard/counsellor',
+  subject_teacher:'/dashboard/teacher',
+  student:        '/dashboard/student',
+};
+
+const urlRole = new URLSearchParams(window.location.search).get('role') || '';
+
+// Populate role display
+(function() {
+  const meta = ROLE_META[urlRole];
+  if (!meta) return;
+  const iconEl  = document.getElementById('role-icon-mini');
+  const labelEl = document.getElementById('role-label');
+  const subEl   = document.getElementById('role-sublabel');
+  iconEl.style.background = meta.bg;
+  iconEl.innerHTML = `<i class="fas ${meta.icon}" style="color:white;font-size:18px"></i>`;
+  labelEl.textContent = meta.label;
+  subEl.textContent   = meta.sub;
+})();
+
+function togglePassword() {
+  const inp = document.getElementById('password-input');
+  const eye = document.getElementById('pwd-eye');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    eye.className = 'fas fa-eye-slash';
+  } else {
+    inp.type = 'password';
+    eye.className = 'fas fa-eye';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'flex';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email    = document.getElementById('email-input').value.trim();
+  const password = document.getElementById('password-input').value;
+  const btn      = document.getElementById('login-btn');
+
+  if (!email || !password) { showError('Please enter email and password.'); return; }
+  document.getElementById('login-error').style.display = 'none';
+  btn.disabled   = true;
+  btn.innerHTML  = '<i class="fas fa-spinner fa-spin"></i> Signing in…';
+
+  try {
+    await initFirebase();
+    const cred = await firebase.auth().signInWithEmailAndPassword(email, password);
+    const user = cred.user;
+
+    // Fetch Firestore profile to verify role
+    const snap = await window.db.collection('users').doc(user.uid).get();
+    if (!snap.exists) throw new Error('Account not found in system. Contact admin.');
+
+    const userData = snap.data();
+    const actualRole = userData.role;
+
+    // Verify role matches selection (if role was selected)
+    if (urlRole && actualRole !== urlRole) {
+      const META = ROLE_META[actualRole] || {};
+      showError(`This account is a "${META.label || actualRole}", not a "${ROLE_META[urlRole]?.label || urlRole}". Redirecting to portal…`);
+      setTimeout(() => {
+        firebase.auth().signOut();
+        window.location.href = '/';
+      }, 2500);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+      return;
+    }
+
+    const dashboard = ROLE_DASHBOARD[actualRole];
+    if (!dashboard) throw new Error(`Unknown role: ${actualRole}`);
+
+    window.location.href = dashboard;
+  } catch (err) {
+    let msg = err.message || 'Login failed. Please try again.';
+    if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+      msg = 'Invalid email or password.';
+    } else if (msg.includes('too-many-requests')) {
+      msg = 'Too many attempts. Please wait and try again.';
+    }
+    showError(msg);
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initFirebase();
+  if (typeof initParticles === 'function') initParticles('particle-canvas');
+  if (typeof initTilt === 'function') initTilt('[data-tilt]');
+  // If already logged in, redirect
+  firebase.auth().onAuthStateChanged(user => {
+    if (user) {
+      window.db.collection('users').doc(user.uid).get().then(snap => {
+        if (snap.exists) {
+          const role = snap.data().role;
+          const dest = ROLE_DASHBOARD[role];
+          if (dest) window.location.href = dest;
+        }
+      });
+    }
+  });
+});
+</script>
+</body>
+</html>

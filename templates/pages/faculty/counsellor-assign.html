@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %}Counsellor Assignment — EduPulse{% endblock %}
+{% block page_title %}Assign Counsellors{% endblock %}
+{% block extra_css %}
+<style>
+.ca-table { width:100%; border-collapse:collapse; }
+.ca-table thead tr {
+  background: rgba(123,47,255,0.08);
+  border-bottom: 1px solid rgba(123,47,255,0.15);
+}
+.ca-table thead th {
+  padding: 12px 18px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ca-table tbody tr {
+  border-bottom: 1px solid rgba(123,47,255,0.07);
+  transition: background 0.15s;
+}
+.ca-table tbody tr:last-child { border-bottom: none; }
+.ca-table tbody tr:hover     { background: rgba(123,47,255,0.04); }
+.ca-table tbody td           { padding: 15px 18px; font-size: 13px; vertical-align: middle; }
+
+.id-mono {
+  font-family: monospace; font-size: 11px; font-weight: 700;
+  background: rgba(123,47,255,0.10); color: #A78BFA;
+  padding: 2px 8px; border-radius: 20px;
+}
+.risk-bar-wrap { display:flex; align-items:center; gap:9px; }
+.risk-bar-bg   { width:80px; height:6px; background:var(--divider); border-radius:4px; overflow:hidden; flex-shrink:0; }
+
+.counsellor-badge {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600;
+}
+.counsellor-none    { background:rgba(156,163,175,0.1); color:var(--text-muted); }
+.counsellor-assigned{ background:rgba(16,185,129,0.1);  color:#10B981; }
+
+.assign-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.assign-select {
+  padding: 7px 12px; font-size: 12px; border-radius: 10px;
+  border: 1px solid rgba(123,47,255,0.25);
+  background: rgba(15,10,30,0.85);
+  color: var(--text-primary);
+  cursor: pointer; min-width: 170px;
+  appearance: auto;
+}
+.assign-select option {
+  background: #1a1035;
+  color: #e2e0f0;
+}
+.assign-select:focus {
+  outline: none;
+  border-color: #7B2FFF;
+  box-shadow: 0 0 0 3px rgba(123,47,255,0.15);
+}
+.assign-btn {
+  padding: 7px 16px; border-radius: 10px; border:none; cursor:pointer;
+  font-size: 12px; font-weight: 700;
+  background: rgba(123,47,255,0.15); color: #A78BFA;
+  transition: background .15s;
+}
+.assign-btn:hover { background: rgba(123,47,255,0.3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Counsellor Assignment</div>
+    <div class="page-subtitle">Assign counsellors to high-risk and medium-risk students</div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid-3" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)"><i class="fas fa-exclamation-triangle" style="color:#EF4444"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-at-risk">—</div><div class="stat-label">At-Risk Students</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,0.12)"><i class="fas fa-user-check" style="color:#10B981"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-assigned">—</div><div class="stat-label">Already Assigned</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,0.12)"><i class="fas fa-user-clock" style="color:#F59E0B"></i></div>
+    <div class="stat-info"><div class="stat-value" id="cnt-unassigned">—</div><div class="stat-label">Awaiting Assignment</div></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="glass-card" style="padding:0;overflow:hidden">
+  <div style="padding:20px 24px 14px;border-bottom:1px solid rgba(123,47,255,0.1);display:flex;align-items:center;gap:10px">
+    <i class="fas fa-user-shield" style="color:#7B2FFF;font-size:16px"></i>
+    <span style="font-weight:800;font-size:15px">Students Needing Counsellor</span>
+  </div>
+  <div style="overflow-x:auto">
+    <div id="unassigned-list">
+      <div class="skeleton" style="height:220px;margin:24px;border-radius:12px"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let _counsellors = [];
+
+async function onPageReady() {
+  const [rdata, cdata] = await Promise.all([
+    apiCall('/api/faculty/risk-scores'),
+    apiCall('/api/faculty/counsellors')
+  ]);
+  _counsellors = cdata.counsellors || [];
+  const students = (rdata.students || []).filter(s => {
+    const lv = (s.riskLevel || s.level || '').toUpperCase();
+    return lv === 'HIGH' || lv === 'MEDIUM';
+  }).map(s => ({
+    ...s,
+    level: (s.riskLevel || s.level || 'LOW').toUpperCase(),
+    score: s.riskScore ?? s.score ?? 0,
+  })).sort((a,b) => b.score - a.score);
+
+  const assigned   = students.filter(s => s.counsellorName && s.counsellorName !== '').length;
+  const unassigned = students.length - assigned;
+  document.getElementById('cnt-at-risk').textContent   = students.length;
+  document.getElementById('cnt-assigned').textContent  = assigned;
+  document.getElementById('cnt-unassigned').textContent= unassigned;
+
+  const el = document.getElementById('unassigned-list');
+  if (!students.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:56px"><i class="fas fa-check-circle" style="color:#10B981"></i><p>No at-risk students — all is well!</p></div>';
+    return;
+  }
+
+  const cOptions = _counsellors.map(c => `<option value="${c.uid}">${c.name}</option>`).join('');
+
+  el.innerHTML = `<table class="ca-table">
+    <thead><tr>
+      <th>#</th>
+      <th>Student</th>
+      <th>Risk Score</th>
+      <th>Level</th>
+      <th>Current Counsellor</th>
+      <th>Assign</th>
+    </tr></thead>
+    <tbody>
+    ${students.map((s, i) => {
+      const lc  = s.level.toLowerCase();
+      const clr = s.level==='HIGH' ? '#EF4444' : s.level==='MEDIUM' ? '#F59E0B' : '#10B981';
+      const hasCounsellor = s.counsellorName && s.counsellorName.trim() !== '';
+      return `
+      <tr>
+        <td style="color:var(--text-muted);font-size:12px;font-weight:600">${i+1}</td>
+        <td>
+          <div style="font-weight:700;font-size:14px">${s.name || '—'}</div>
+          <span class="id-mono" style="margin-top:4px;display:inline-block">${s.customId || '—'}</span>
+        </td>
+        <td>
+          <div class="risk-bar-wrap">
+            <div class="risk-bar-bg">
+              <div style="width:${Math.min(s.score,100)}%;height:100%;background:${clr};border-radius:4px"></div>
+            </div>
+            <span style="font-weight:800;color:${clr}">${s.score}</span>
+          </div>
+        </td>
+        <td>
+          <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:0.05em;background:${clr}18;color:${clr}">
+            ${s.level}
+          </span>
+        </td>
+        <td>
+          <span class="counsellor-badge ${hasCounsellor ? 'counsellor-assigned' : 'counsellor-none'}">
+            <i class="fas ${hasCounsellor ? 'fa-user-check' : 'fa-user-slash'}"></i>
+            ${hasCounsellor ? s.counsellorName : 'Not Assigned'}
+          </span>
+        </td>
+        <td>
+          <div class="assign-row">
+            <select id="csel-${s.uid}" class="assign-select">
+              <option value="">Select counsellor…</option>
+              ${cOptions}
+            </select>
+            <button onclick="assign('${s.uid}')" class="assign-btn">
+              <i class="fas fa-user-plus"></i> Assign
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function assign(uid) {
+  const cid = document.getElementById('csel-' + uid).value;
+  if (!cid) { showToast('Select a counsellor first', 'warning'); return; }
+  try {
+    showLoader('Assigning counsellor…');
+    await apiCall('/api/faculty/counsellor-assign', 'POST', { studentUids: [uid], counsellorUid: cid });
+    showToast('Counsellor assigned successfully!', 'success');
+    onPageReady();
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+</script>
+{% endblock %}

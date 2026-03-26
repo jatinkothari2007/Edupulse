@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Attendance — EduPulse{% endblock %}
+{% block page_title %}Attendance{% endblock %}
+{% block page_roles_check %}requireLogin(['subject_teacher','faculty_advisor','admin']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/teacher"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/notes"><i class="fas fa-sticky-note"></i>Notes</a>
+<a class="nav-link" href="/pages/attendance"><i class="fas fa-calendar-check"></i>Attendance</a>
+<a class="nav-link" href="/pages/assignments"><i class="fas fa-tasks"></i>Assignments</a>
+<a class="nav-link" href="/pages/marks"><i class="fas fa-star"></i>Marks</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Mark Attendance</div>
+<div class="page-subtitle">Record student attendance for your class</div>
+
+<div class="glass-card" style="padding:24px;margin-bottom:20px">
+  <div class="filter-row">
+    <div class="form-group" style="margin:0;flex:1">
+      <label class="form-label">Class ID</label>
+      <input class="form-input" id="att-class" placeholder="Enter class ID">
+    </div>
+    <div class="form-group" style="margin:0;flex:1">
+      <label class="form-label">Subject ID</label>
+      <input class="form-input" id="att-subject" placeholder="Enter subject ID">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Date</label>
+      <input class="form-input" id="att-date" type="date" value="${new Date().toISOString().split('T')[0]}">
+    </div>
+    <button class="btn btn-primary" onclick="loadStudentsForAttendance()" style="margin-top:20px"><i class="fas fa-search"></i>Load Students</button>
+  </div>
+</div>
+
+<div class="glass-card" style="padding:24px" id="att-section" style="display:none">
+  <div class="section-header">
+    <span class="section-title">Student List</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" style="background:rgba(16,185,129,0.10);color:#059669" onclick="markAll('present')">✓ All Present</button>
+      <button class="btn btn-sm" style="background:rgba(239,68,68,0.10);color:#DC2626" onclick="markAll('absent')">✗ All Absent</button>
+      <button class="btn btn-primary btn-sm" onclick="saveAttendance()"><i class="fas fa-save"></i>Save</button>
+    </div>
+  </div>
+  <div id="att-student-list" style="margin-top:12px"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let attStudents=[];
+async function loadStudentsForAttendance(){
+  const classId=document.getElementById('att-class').value.trim();
+  if(!classId){showToast('Class ID required','warning');return;}
+  showLoader();
+  try{
+    // Try faculty route to get students
+    const r=await apiCall('/api/faculty/attendance?classId='+classId);
+    // Get unique student IDs from existing records + fetch all from class
+    const classDoc=await apiCall('/api/advisor/classes');
+    const cls=(classDoc.data||[]).find(c=>c.id===classId);
+    attStudents=cls?cls.students||[]:[];
+    renderAttList();
+    document.getElementById('att-section').style.display='block';
+  }catch(e){
+    // Fallback: show empty form to enter manually
+    attStudents=[];renderAttList();document.getElementById('att-section').style.display='block';
+    showToast('Could not auto-load students. Add manually.','warning');
+  }finally{hideLoader();}
+}
+function renderAttList(){
+  const el=document.getElementById('att-student-list');
+  if(!attStudents.length){
+    el.innerHTML=`<div class="empty-state"><p>No students loaded. Make sure class ID is correct.</p></div>`;return;
+  }
+  el.innerHTML=attStudents.map((sid,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(167,139,250,0.12)">
+      <span style="font-size:13px;font-weight:500">${sid}</span>
+      <div style="display:flex;gap:6px">
+        <button id="btn-${i}-present" class="btn btn-sm att-btn" style="background:rgba(16,185,129,0.10);color:#059669" onclick="setStatus(${i},'present',this)">Present</button>
+        <button id="btn-${i}-late"    class="btn btn-sm att-btn" style="background:rgba(245,158,11,0.10);color:#D97706"  onclick="setStatus(${i},'late',this)">Late</button>
+        <button id="btn-${i}-absent"  class="btn btn-sm att-btn" style="background:rgba(239,68,68,0.10);color:#DC2626"   onclick="setStatus(${i},'absent',this)">Absent</button>
+      </div>
+    </div>`).join('');
+  attStudents = attStudents.map(sid => ({studentId:sid, status:'present'}));
+}
+function setStatus(i,status,btn){
+  attStudents[i].status=status;
+  const btns=document.querySelectorAll(`[id^="btn-${i}-"]`);
+  btns.forEach(b=>{b.style.opacity='0.5';b.style.fontWeight='400';});
+  btn.style.opacity='1';btn.style.fontWeight='700';
+}
+function markAll(status){
+  attStudents.forEach((s,i)=>{s.status=status;});
+  document.querySelectorAll('.att-btn').forEach(b=>{b.style.opacity='0.5';b.style.fontWeight='400';});
+}
+async function saveAttendance(){
+  const classId=document.getElementById('att-class').value.trim();
+  const subjectId=document.getElementById('att-subject').value.trim();
+  const date=document.getElementById('att-date').value;
+  if(!classId||!date){showToast('Class ID and date required','warning');return;}
+  const records=attStudents.map(s=>({studentId:s.studentId||s,status:s.status||'present',subjectId,date}));
+  showLoader();try{
+    await apiCall('/api/teacher/attendance','POST',{classId,records});
+    showToast(`${records.length} attendance records saved!`,'success');
+  }catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+async function onPageReady(user){
+  document.getElementById('att-date').value=new Date().toISOString().split('T')[0];
+}
+</script>
+{% endblock %}

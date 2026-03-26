@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+{% block title %}Faculty Dashboard — EduPulse{% endblock %}
+{% block page_title %}Faculty Dashboard{% endblock %}
+{% block page_subtitle %}Monitor classes, track at-risk students, schedule quizzes{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <div>
+    <h2 class="section-title">Welcome, <span id="faculty-name">Faculty</span> 👋</h2>
+    <p class="section-subtitle">Overview of your classes and student risk levels.</p>
+  </div>
+  <a href="/pages/faculty/classes" class="btn btn-primary">
+    <i class="fas fa-chalkboard"></i> Manage Classes
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid-3">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(45,212,191,0.12)">
+      <i class="fas fa-chalkboard" style="color:#2DD4BF"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-classes"><div class="skeleton" style="height:28px;width:44px"></div></div>
+      <div class="stat-label">My Classes</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(123,47,255,0.12)">
+      <i class="fas fa-user-graduate" style="color:#7B2FFF"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-students"><div class="skeleton" style="height:28px;width:44px"></div></div>
+      <div class="stat-label">Total Students</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,0.12)">
+      <i class="fas fa-exclamation-triangle" style="color:#EF4444"></i>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-at-risk"><div class="skeleton" style="height:28px;width:36px"></div></div>
+      <div class="stat-label">At-Risk Students</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="two-col">
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Class Risk Overview</p><p class="card-subtitle">Risk distribution per class</p></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container"><canvas id="class-risk-chart"></canvas></div>
+    </div>
+  </div>
+  <div class="glass-card">
+    <div class="card-header">
+      <div><p class="card-title">Quick Actions</p></div>
+    </div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+      <a href="/pages/faculty/risk-scores"       class="btn btn-primary">   <i class="fas fa-exclamation-triangle"></i> View Risk Scores</a>
+      <a href="/pages/faculty/quiz-manage"        class="btn btn-secondary"> <i class="fas fa-clipboard-list"></i>       Manage Quizzes</a>
+      <a href="/pages/faculty/counsellor-assign"  class="btn btn-ghost">     <i class="fas fa-user-check"></i>            Assign Counsellors</a>
+      <button class="btn btn-ghost" onclick="openReport('/api/reports/class/CLS0001')">
+        <i class="fas fa-file-pdf"></i> Export Class Report
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- At-risk students table -->
+<div class="glass-card full-width">
+  <div class="card-header">
+    <div><p class="card-title">At-Risk Students</p><p class="card-subtitle">Students flagged HIGH or MEDIUM risk</p></div>
+    <a href="/pages/faculty/risk-scores" class="btn btn-ghost btn-sm">View All</a>
+  </div>
+  <div class="card-body" style="padding-top:0">
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead><tr><th>Student</th><th>ID</th><th>Class</th><th>Risk Score</th><th>Level</th></tr></thead>
+        <tbody id="risk-table-body">
+          <tr><td colspan="5"><div class="skeleton skeleton-row"></div></td></tr>
+          <tr><td colspan="5"><div class="skeleton skeleton-row"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _classRiskChart = null;
+
+waitForAuth().then(user => {
+  if (!user) { window.location.href='/'; return; }
+  document.getElementById('faculty-name').textContent = (user.name||'Faculty').split(' ')[0];
+  listenNotifications(user.uid);
+  loadFacultyDashboard(user);
+  loadProctorReports();        // load proctor reports table
+});
+
+async function loadFacultyDashboard(user) {
+  try {
+    const [classRes, riskRes] = await Promise.all([
+      cachedApiCall('/api/faculty/classes','GET',null,90).catch(()=>({classes:[]})),
+      cachedApiCall('/api/faculty/risk-scores','GET',null,90).catch(()=>({students:[]}))
+    ]);
+
+    const classes  = classRes.classes  || classRes || [];
+    const students = riskRes.students  || riskRes  || [];
+
+    /* normalise risk level field — API may return 'level' or 'riskLevel' */
+    students.forEach(s => {
+      if (!s.riskLevel && s.level) s.riskLevel = s.level.toUpperCase();
+    });
+
+    /* compute per-class HIGH/MEDIUM counts from students */
+    const riskByClass = {};
+    students.forEach(s => {
+      const cid = s.classId || s.className || 'Unknown';
+      if (!riskByClass[cid]) riskByClass[cid] = { high: 0, medium: 0 };
+      if (s.riskLevel === 'HIGH')   riskByClass[cid].high++;
+      if (s.riskLevel === 'MEDIUM') riskByClass[cid].medium++;
+    });
+
+    /* enrich class objects with computed risk counts */
+    const enrichedClasses = Array.isArray(classes) ? classes.map(c => {
+      const key = c.id || c.classId || c.name;
+      const r   = riskByClass[key] || riskByClass[c.name] || { high: 0, medium: 0 };
+      return { ...c, highRisk: r.high, mediumRisk: r.medium };
+    }) : [];
+
+    const atRisk = students.filter(s => s.riskLevel === 'HIGH' || s.riskLevel === 'MEDIUM');
+
+    document.getElementById('stat-classes').textContent  = enrichedClasses.length;
+    document.getElementById('stat-students').textContent = students.length;
+    document.getElementById('stat-at-risk').textContent  = atRisk.length;
+
+    renderClassRiskChart(enrichedClasses);
+    renderRiskTable(atRisk);
+  } catch(e) { showToast('Dashboard load error: '+e.message,'error'); }
+}
+
+function renderClassRiskChart(classes) {
+  const ctx = document.getElementById('class-risk-chart');
+  if (!ctx) return;
+  if (_classRiskChart) _classRiskChart.destroy();
+  const labels = classes.map(c=>c.name||c.className||c.classId||'Cls');
+  const highs  = classes.map(c=>c.highRisk||0);
+  const meds   = classes.map(c=>c.mediumRisk||0);
+  _classRiskChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'High',   data:highs, backgroundColor:'rgba(239,68,68,0.7)',  borderRadius:6, borderSkipped:false},
+        {label:'Medium', data:meds,  backgroundColor:'rgba(245,158,11,0.7)', borderRadius:6, borderSkipped:false}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+      plugins:{legend:{position:'bottom',labels:{font:{size:12}}}},
+      scales:{
+        y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'var(--divider)'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+}
+
+
+function renderRiskTable(students) {
+  const tbody = document.getElementById('risk-table-body');
+  if (!students.length) {
+    tbody.innerHTML='<tr><td colspan="5"><div class="empty-state"><i class="fas fa-check-circle"></i><p>No at-risk students</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = students.slice(0,15).map(s=>`
+    <tr>
+      <td style="font-weight:600">${s.name||'—'}</td>
+      <td class="mono-text">${s.customId||'—'}</td>
+      <td>${s.className||s.classId||'—'}</td>
+      <td style="font-weight:700;color:${s.riskLevel==='HIGH'?'#EF4444':'#F59E0B'}">${s.riskScore||'—'}</td>
+      <td><span class="badge badge-${(s.riskLevel||'low').toLowerCase()}">${s.riskLevel||'—'}</span></td>
+    </tr>`).join('');
+}
+
+/* ── Quiz Proctor Reports ── */
+async function loadProctorReports() {
+  try {
+    const d = await apiCall('/api/faculty/proctor-reports');
+    const reports = d.reports || [];
+    const tbody = document.getElementById('proctor-reports-body');
+    if (!tbody) return;
+    if (!reports.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:20px"><i class="fas fa-clipboard-check"></i><p>No proctor reports yet</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = reports.map(r => {
+      const vc = r.verdict==='clean' ? '#10B981' : r.verdict==='suspicious' ? '#F59E0B' : '#EF4444';
+      const vi = r.verdict==='clean' ? '✅' : r.verdict==='suspicious' ? '⚠️' : '🚨';
+      const rs = r.riskScore ?? 100;
+      const fc = rs >= 75 ? '#10B981' : rs >= 40 ? '#F59E0B' : '#EF4444';
+      const dt = r.submittedAt ? new Date(r.submittedAt._seconds*1000||r.submittedAt).toLocaleString() : '—';
+      return `<tr>
+        <td style="font-weight:600">${r.studentName||'—'}</td>
+        <td class="mono-text">${r.studentCustomId||'—'}</td>
+        <td><span style="background:${vc}22;color:${vc};padding:3px 12px;border-radius:20px;font-weight:700;font-size:12px">${vi} ${(r.verdict||'clean').toUpperCase()}</span></td>
+        <td style="font-weight:700;color:${fc}">${rs}/100</td>
+        <td style="color:${r.focusScore>=70?'#10B981':'#F59E0B'}">${r.focusScore??100}/100</td>
+        <td style="color:var(--text-muted);font-size:12px">${dt}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.warn('Proctor reports load failed:', e); }
+}
+</script>
+
+<!-- ── Quiz Proctor Reports Section ── -->
+<div class="glass-card" style="margin-top:24px">
+  <div class="card-header">
+    <div>
+      <p class="card-title"><i class="fas fa-user-shield" style="color:#7B2FFF;margin-right:8px"></i>Quiz Proctor Reports</p>
+      <p class="card-subtitle">Behavioral monitoring reports from Pulse Quiz sessions</p>
+    </div>
+  </div>
+  <div class="card-body" style="padding:0">
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--glass-border)">
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">Student</th>
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">ID</th>
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">Verdict</th>
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">Risk Score</th>
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">Focus</th>
+            <th style="padding:12px 16px;text-align:left;color:var(--text-muted);font-weight:700;text-transform:uppercase;font-size:11px">Submitted</th>
+          </tr>
+        </thead>
+        <tbody id="proctor-reports-body">
+          <tr><td colspan="6"><div class="skeleton" style="height:40px;margin:8px 16px"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+

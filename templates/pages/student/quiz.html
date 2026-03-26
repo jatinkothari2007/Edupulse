@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% block title %}Pulse Quiz — EduPulse{% endblock %}
+{% block page_title %}Pulse Quiz{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Shake animation for alert modal ── */
+@keyframes shake {
+  0%,100%{ transform:translateX(0); }
+  20%    { transform:translateX(-10px); }
+  40%    { transform:translateX(10px); }
+  60%    { transform:translateX(-6px); }
+  80%    { transform:translateX(6px); }
+}
+.shake { animation: shake 0.5s ease; }
+
+/* ── Proctor layout ── */
+.proctor-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.quiz-main {
+  flex: 1;
+  min-width: 0;
+}
+#proctor-sidebar {
+  width: 230px;
+  flex-shrink: 0;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 14px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+
+/* ── Timer pulse when low ── */
+@keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.timer-danger { animation: pulse-red 0.8s infinite; }
+
+@media print {
+  #quiz-list-section, #quiz-take-section, .no-print { display: none !important; }
+  #quiz-report-section { display: block !important; }
+  .glass-card { border: 1px solid #ddd !important; box-shadow: none !important; background: #fff !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ══════════════════════════════════════════════
+     Quiz List
+═══════════════════════════════════════════════ -->
+<div id="quiz-list-section">
+  <div class="page-title">Pulse Quiz</div>
+  <div class="page-subtitle">Case-based wellbeing quizzes proctored with webcam monitoring</div>
+  <div id="quiz-grid" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+    <div class="skeleton" style="height:90px"></div>
+    <div class="skeleton" style="height:90px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     Quiz Taking  (proctor layout)
+═══════════════════════════════════════════════ -->
+<div id="quiz-take-section" style="display:none">
+
+  <!-- Fullscreen warning overlay -->
+  <div id="fs-warning-overlay"
+       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;
+              align-items:center;justify-content:center;flex-direction:column;gap:16px">
+    <div style="font-size:52px">⚠️</div>
+    <div style="color:#fff;font-size:20px;font-weight:800">You exited fullscreen!</div>
+    <div style="color:rgba(255,255,255,0.65);font-size:14px;text-align:center">
+      Recorded as a distraction.<br>Return to fullscreen to continue.
+    </div>
+    <button class="btn btn-primary" style="padding:14px 32px;font-size:16px" onclick="enterFullscreen()">
+      <i class="fas fa-expand"></i> Return to Fullscreen
+    </button>
+  </div>
+
+  <!-- Proctor alert modal -->
+  <div id="proctor-alert-modal"
+       style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.6);
+              align-items:center;justify-content:center">
+    <div class="glass-card" style="padding:28px;max-width:400px;width:90%;text-align:center;border:2px solid #EF4444">
+      <div style="font-size:44px;margin-bottom:12px">🚨</div>
+      <div id="proctor-alert-text" style="font-size:17px;font-weight:800;color:#EF4444;margin-bottom:8px">
+        Warning!
+      </div>
+      <div style="font-size:12px;color:var(--text-muted)">This event has been recorded in your report.</div>
+    </div>
+  </div>
+
+  <div class="proctor-layout">
+    <!-- Left: Quiz content -->
+    <div class="quiz-main">
+      <!-- Top bar: title + timer -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div id="quiz-title" style="font-size:18px;font-weight:800;color:var(--text-primary)">Pulse Quiz</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="quiz-timer"
+               style="font-size:22px;font-weight:900;color:var(--purple-primary);font-family:'Space Grotesk',sans-serif">
+            10:00
+          </div>
+        </div>
+      </div>
+
+      <!-- Questions container -->
+      <div id="quiz-questions"></div>
+
+      <!-- Action buttons -->
+      <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn btn-danger" onclick="cancelQuiz()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+        <button class="btn btn-primary" id="submit-quiz-btn" onclick="submitQuiz()">
+          <i class="fas fa-check"></i> Submit Quiz
+        </button>
+      </div>
+    </div>
+
+    <!-- Right: Proctor sidebar -->
+    <div id="proctor-sidebar">
+      <!-- Populated by _buildSidebar() in quiz-proctor.js -->
+      <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px">
+        <i class="fas fa-spinner fa-spin"></i><br>Loading proctor…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════
+     Post-Exam Report Section
+═══════════════════════════════════════════════ -->
+<div id="quiz-report-section" style="display:none">
+  <!-- Rendered by renderReport() -->
+  <div id="report-body"></div>
+  <div style="display:flex;gap:12px;justify-content:center;margin-top:24px" class="no-print">
+    <button class="btn btn-primary" onclick="backToList()">
+      <i class="fas fa-arrow-left"></i> Back to Quizzes
+    </button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/quiz-proctor.js') }}"></script>
+<script>
+var _currentQuiz    = null;
+var _answers        = {};
+var _timerInterval  = null;
+var _timeLeft       = 600;
+var _proctorResult  = null;   // returned by stopProctoring()
+var _quizResult     = null;   // returned by backend submit
+
+/* ─────────────────────────────────────────────
+   Load quiz list
+───────────────────────────────────────────── */
+async function _loadQuizList() {
+  try {
+    var data    = await apiCall('/api/student/quizzes');
+    var quizzes = data.quizzes || [];
+    var grid    = document.getElementById('quiz-grid');
+
+    if (!quizzes.length) {
+      grid.innerHTML = '<div class="empty-state"><i class="fas fa-clipboard-list" style="font-size:36px"></i><p>No quizzes scheduled yet</p></div>';
+      return;
+    }
+
+    grid.innerHTML = quizzes.map(function(q) {
+      var aid = q.id;
+      var completed = q.attempted;
+      return '<div class="glass-card" style="padding:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">'
+        + '<div>'
+          + '<div style="font-weight:700;font-size:15px;margin-bottom:4px">' + (q.title||'Pulse Quiz') + '</div>'
+          + '<div style="font-size:11px;color:var(--text-muted)">Scheduled: ' + (q.scheduledAt||'—') + ' · 10 min · 10 questions</div>'
+        + '</div>'
+        + (completed
+            ? '<span class="badge badge-low" style="padding:8px 16px"><i class="fas fa-check-circle"></i> Completed</span>'
+            : '<button class="btn btn-primary" onclick="startQuiz(\''+aid+'\',\''+((q.title||'Pulse Quiz').replace(/'/g,"\\'"))+'\')">'
+              + '<i class="fas fa-play"></i> Start Quiz</button>')
+        + '</div>';
+    }).join('');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+/* ─────────────────────────────────────────────
+   Start quiz
+───────────────────────────────────────────── */
+async function startQuiz(qid, title) {
+  try { enterFullscreen(); } catch(_) {}
+  showLoader('Loading quiz…');
+  try {
+    var data = await apiCall('/api/student/quizzes/' + qid);
+    _currentQuiz = data;
+    _answers     = {};
+    document.getElementById('quiz-title').textContent = title || 'Pulse Quiz';
+
+    /* Render questions */
+    var qs = data.questions || [];
+    document.getElementById('quiz-questions').innerHTML = qs.map(function(q, i) {
+      return '<div class="glass-card" style="padding:20px;margin-bottom:14px">'
+        + '<div style="font-weight:700;font-size:14px;margin-bottom:12px;color:var(--text-primary)">Q' + (i+1) + '. ' + q.question + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:8px">'
+        + Object.entries(q.options || {}).map(function(entry) {
+            var k = entry[0], v = entry[1];
+            return '<button onclick="selectAnswer(' + i + ',\'' + k + '\')" id="opt-' + i + '-' + k + '"'
+              + ' style="text-align:left;padding:10px 14px;border-radius:10px;border:1.5px solid var(--glass-border);'
+              + 'background:var(--glass-bg);cursor:pointer;font-size:13px;color:var(--text-primary);'
+              + 'transition:all 0.15s;font-family:\'Inter\',sans-serif">'
+              + '<span style="font-weight:700;color:var(--purple-primary);margin-right:6px">' + k.toUpperCase() + '.</span>' + v
+              + '</button>';
+          }).join('')
+        + '</div></div>';
+    }).join('');
+
+    /* Timer */
+    _timeLeft = 600;
+    _timerInterval = setInterval(function() {
+      _timeLeft--;
+      window._timeLeft = _timeLeft;
+      var m = String(Math.floor(_timeLeft/60)).padStart(2,'0');
+      var s = String(_timeLeft%60).padStart(2,'0');
+      var timerEl = document.getElementById('quiz-timer');
+      if (timerEl) {
+        timerEl.textContent = m + ':' + s;
+        if (_timeLeft <= 60) { timerEl.style.color = '#EF4444'; timerEl.classList.add('timer-danger'); }
+      }
+      if (_timeLeft <= 0) { clearInterval(_timerInterval); submitQuiz(); }
+    }, 1000);
+
+    /* Start proctoring */
+    await startProctoring({
+      emotionCheckInterval : 4000,
+      alertThreshold       : 2,
+      focusDrainPerAlert   : 8,
+      tabSwitchPenalty     : 20,
+      enableAISummary      : true,
+    });
+
+    document.getElementById('quiz-list-section').style.display = 'none';
+    document.getElementById('quiz-take-section').style.display = 'block';
+    document.getElementById('quiz-report-section').style.display = 'none';
+
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+
+/* ─────────────────────────────────────────────
+   Answer selection
+───────────────────────────────────────────── */
+function selectAnswer(qIdx, key) {
+  _answers[String(qIdx)] = key;
+  var qStr = String(qIdx);
+  /* reset all options for this Q */
+  var btns = document.querySelectorAll('[id^="opt-' + qStr + '-"]');
+  btns.forEach(function(b) {
+    b.style.background   = 'var(--glass-bg)';
+    b.style.borderColor  = 'var(--glass-border)';
+    b.style.color        = 'var(--text-primary)';
+  });
+  /* highlight selected */
+  var sel = document.getElementById('opt-' + qStr + '-' + key);
+  if (sel) {
+    sel.style.background  = 'rgba(123,47,255,0.15)';
+    sel.style.borderColor = '#7B2FFF';
+    sel.style.color       = '#7B2FFF';
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Submit quiz
+───────────────────────────────────────────── */
+async function submitQuiz() {
+  clearInterval(_timerInterval);
+  _proctorResult = stopProctoring();
+  exitFullscreen();
+
+  try {
+    showLoader('Submitting…');
+    var r = await apiCall(
+      '/api/student/quizzes/' + _currentQuiz.id + '/submit',
+      'POST',
+      { answers: _answers, proctorData: _proctorResult }
+    );
+    _quizResult = r;
+
+    /* Save proctor session to backend (notify FA) — fire-and-forget */
+    if (_proctorResult && _proctorResult.proctorSession) {
+      apiCall(
+        '/api/student/quizzes/' + _currentQuiz.id + '/proctor-report',
+        'POST',
+        { proctorSession: _proctorResult.proctorSession }
+      ).catch(function(e){ console.warn('Proctor report save failed:', e); });
+    }
+
+    /* Switch to report section */
+    document.getElementById('quiz-take-section').style.display   = 'none';
+    document.getElementById('quiz-report-section').style.display = 'block';
+
+    /* render */
+    renderReport(
+      _proctorResult.proctorSession,
+      'report-body',
+      r,
+      (_currentQuiz && _currentQuiz.questions) || []
+    );
+
+  } catch(e) { showToast(e.message, 'error'); }
+  finally { hideLoader(); }
+}
+
+/* ─────────────────────────────────────────────
+   Cancel / Back
+───────────────────────────────────────────── */
+function cancelQuiz() {
+  clearInterval(_timerInterval);
+  stopProctoring();
+  exitFullscreen();
+  backToList();
+}
+
+function backToList() {
+  document.getElementById('quiz-list-section').style.display   = 'block';
+  document.getElementById('quiz-take-section').style.display   = 'none';
+  document.getElementById('quiz-report-section').style.display = 'none';
+  exitFullscreen();
+  _loadQuizList();
+}
+
+/* ─────────────────────────────────────────────
+   Boot
+───────────────────────────────────────────── */
+function onPageReady() { return _loadQuizList(); }
+waitForAuth().then(function(u) { if(u) { window._currentUser = u; _loadQuizList(); } });
+
+window.onPageReady  = onPageReady;
+window.startQuiz    = startQuiz;
+window.selectAnswer = selectAnswer;
+window.submitQuiz   = submitQuiz;
+window.cancelQuiz   = cancelQuiz;
+window.backToList   = backToList;
+</script>
+{% endblock %}

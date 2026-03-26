@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Notifications — EduPulse{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-title">All Notifications</div>
+<div class="page-subtitle">Your alerts, messages and academic updates</div>
+<div class="glass-card" style="padding:24px">
+  <div class="section-header">
+    <div class="section-title">Inbox</div>
+    <button class="btn btn-secondary" onclick="markAllRead()"><i class="fas fa-check-double"></i> Mark All Read</button>
+  </div>
+  <div id="notif-full-list" style="margin-top:16px"><div class="skeleton" style="height:250px"></div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const PRIORITY_CLR={critical:'#EF4444',high:'#F59E0B',medium:'#7B2FFF',low:'#94A3B8'};
+
+async function onPageReady(user){
+  window.db.collection('notifications').doc(user.uid).collection('items')
+    .orderBy('createdAt','desc').limit(80)
+    .onSnapshot(snap=>{
+      const notifs=[];
+      snap.forEach(doc=>notifs.push({id:doc.id,...doc.data()}));
+      const el=document.getElementById('notif-full-list');
+      if(!notifs.length){el.innerHTML='<div class="empty-state"><i class="fas fa-check-circle" style="color:#10B981;font-size:36px"></i><p>You\'re all caught up! 🎉</p></div>';return;}
+      el.innerHTML=notifs.map(n=>{
+        const clr=PRIORITY_CLR[n.priority]||'#7B2FFF';
+        return `<div class="notif-item ${n.isRead?'':'unread'}" onclick="readNotif('${n.id}',this)" style="border-left:3px solid ${clr};margin-bottom:8px;cursor:default">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="flex:1"><div class="notif-title">${n.title||'Notification'}</div><div class="notif-msg">${n.message||''}</div></div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:11px;color:var(--text-muted)">${n.createdAt?_fmtTime(n.createdAt):''}</div>
+              <span style="font-size:10px;background:${clr}20;color:${clr};border:1px solid ${clr}30;border-radius:20px;padding:2px 8px;display:block;margin-top:4px">${n.priority||'medium'}</span>
+            </div>
+          </div>
+        </div>`;}).join('');
+    });
+}
+function _fmtTime(ts){try{const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(_){return '';}}
+</script>
+{% endblock %}

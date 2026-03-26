@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block title %}My Marks — EduPulse{% endblock %}
+{% block page_title %}My Marks{% endblock %}
+{% block content %}
+<div class="page-title">Academic Marks</div>
+<div class="page-subtitle">All your marks across subjects and assessment types</div>
+<div class="glass-card" style="padding:24px;margin-bottom:24px">
+  <div class="chart-container"><canvas id="marks-chart"></canvas></div>
+</div>
+<div class="glass-card" style="padding:24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="section-title" style="margin:0">Detailed Marks</div>
+    <input id="marks-search" class="form-input" placeholder="🔍  Search subject or type…"
+      style="width:240px;padding:8px 12px;font-size:13px" oninput="filterMarks(this.value)">
+  </div>
+  <div id="marks-table"><div class="skeleton" style="height:200px"></div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let _allMarks = [];
+
+function gradeColor(pct){ return pct>=60?'#10B981':pct>=40?'#F59E0B':'#EF4444'; }
+function gradeLabel(pct){ return pct>=90?'A+':pct>=80?'A':pct>=70?'B':pct>=60?'C':pct>=50?'D':'F'; }
+
+function renderMarksTable(marks) {
+  const el = document.getElementById('marks-table');
+  if (!marks.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-search"></i><p>No matching records</p></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div style="border-radius:14px;overflow:hidden;border:1px solid var(--card-border)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:rgba(123,47,255,0.12);border-bottom:2px solid var(--card-border)">
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center;width:40px">#</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Subject</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Type</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Score</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Max</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:left">Progress</th>
+            <th style="padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);text-align:center">Grade</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${marks.map((m, i) => {
+            const score   = m.score   ?? m.marks   ?? 0;
+            const maxMark = m.maxScore ?? m.maxMarks ?? 100;
+            const subj    = m.subject  || m.subjectId || '—';
+            const type    = m.type     || m.component || '—';
+            const pct     = maxMark ? ((score/maxMark)*100).toFixed(1) : 0;
+            const gc      = gradeColor(pct);
+            const grade   = gradeLabel(pct);
+            const bgStripe = i%2===0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+            return `<tr style="background:${bgStripe};transition:background 0.15s"
+              onmouseover="this.style.background='rgba(123,47,255,0.07)'"
+              onmouseout="this.style.background='${bgStripe}'">
+              <td style="padding:11px 14px;text-align:center;color:var(--text-muted);font-size:12px">${i+1}</td>
+              <td style="padding:11px 14px;font-weight:700;font-size:13px">${subj}</td>
+              <td style="padding:11px 14px">
+                <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(123,47,255,0.12);color:#A78BFA">${type}</span>
+              </td>
+              <td style="padding:11px 14px;text-align:center;font-weight:800;font-size:15px;color:${gc}">${score}</td>
+              <td style="padding:11px 14px;text-align:center;color:var(--text-muted);font-size:13px">${maxMark}</td>
+              <td style="padding:11px 14px;min-width:120px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="flex:1;height:6px;background:var(--divider);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;width:${pct}%;background:${gc};border-radius:3px;transition:width 0.8s ease"></div>
+                  </div>
+                  <span style="font-size:11px;font-weight:600;color:${gc};min-width:36px">${pct}%</span>
+                </div>
+              </td>
+              <td style="padding:11px 14px;text-align:center">
+                <span style="display:inline-block;width:32px;height:32px;border-radius:50%;line-height:32px;text-align:center;font-weight:800;font-size:14px;color:white;background:${gc}">${grade}</span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function onPageReady() {
+  const data  = await apiCall('/api/student/marks');
+  _allMarks   = data.marks || [];
+  const el    = document.getElementById('marks-table');
+
+  if (!_allMarks.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-star"></i><p>No marks recorded yet</p></div>';
+    return;
+  }
+
+  renderMarksTable(_allMarks);
+
+  // Chart — average % per subject, sorted A→Z, blank subjects excluded
+  const SKIP = new Set(['', 'unknown', 'n/a', '-']);
+  const subMap = {};
+  _allMarks.forEach(m => {
+    const subj  = (m.subject || m.subjectId || '').trim();
+    if (!subj || SKIP.has(subj.toLowerCase())) return;
+    const score = m.score ?? m.marks ?? 0;
+    const max   = m.maxScore ?? m.maxMarks ?? 100;
+    if (!subMap[subj]) subMap[subj] = { total:0, count:0 };
+    subMap[subj].total += score/max*100;
+    subMap[subj].count++;
+  });
+  const sortedKeys = Object.keys(subMap).sort();
+  renderBarChart('marks-chart', sortedKeys, sortedKeys.map(k=>(subMap[k].total/subMap[k].count).toFixed(1)), 'Avg %');
+}
+
+function filterMarks(term) {
+  const t = term.toLowerCase();
+  const filtered = _allMarks.filter(m =>
+    (m.subject||m.subjectId||'').toLowerCase().includes(t) ||
+    (m.type||m.component||'').toLowerCase().includes(t)
+  );
+  renderMarksTable(filtered);
+}
+</script>
+{% endblock %}

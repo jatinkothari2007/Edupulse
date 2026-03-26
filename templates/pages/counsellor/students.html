@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Counsellor Students — EduPulse{% endblock %}
+{% block page_title %}My Students{% endblock %}
+{% block content %}
+<div class="page-title">Assigned Students</div>
+<div class="page-subtitle">Monitor and support your assigned students</div>
+<div id="students-grid" class="grid-2" style="gap:16px;margin-top:16px"><div class="skeleton" style="height:160px"></div></div>
+
+<!-- Student Detail Drawer -->
+<div id="detail-drawer" style="display:none;position:fixed;top:0;right:0;width:420px;height:100vh;z-index:9998;overflow-y:auto">
+  <div class="glass-card" style="height:100%;border-radius:0;padding:24px">
+    <button onclick="closeDrawer()" style="background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;margin-bottom:10px">←</button>
+    <div id="drawer-content"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function onPageReady(){
+  const d=await apiCall('/api/counsellor/students');
+  const students=d.students||[];
+  const grid=document.getElementById('students-grid');
+  if(!students.length){grid.innerHTML='<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-users"></i><p>No assigned students</p></div>';return;}
+  grid.innerHTML=students.map(s=>`
+    <div class="glass-card" style="padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:15px">${s.name}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${s.customId} · ${s.classId||'—'}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-direction:column;align-items:flex-end">
+          <span class="badge badge-${(s.level||'low').toLowerCase()}">${s.level||'LOW'}</span>
+          <span style="font-size:11px;color:${s.caseStatus==='active'?'#10B981':'var(--text-muted)'}">${s.caseStatus||'—'}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:12px;color:var(--text-secondary)">Risk:</span>
+        <div style="flex:1;height:5px;background:var(--divider);border-radius:3px"><div style="width:${s.score||0}%;height:100%;background:${s.level==='HIGH'?'#EF4444':s.level==='MEDIUM'?'#F59E0B':'#10B981'};border-radius:3px"></div></div>
+        <span style="font-weight:700;font-size:13px">${s.score||0}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Last mood: ${s.lastMood||'—'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="viewDetail('${s.uid}')" class="btn btn-sm btn-primary"><i class="fas fa-eye"></i> Details</button>
+        <a href="/pages/messaging" class="btn btn-sm btn-secondary"><i class="fas fa-comment"></i> Message</a>
+        <button onclick="closeCase('${s.uid}','${s.name}')" class="btn btn-sm btn-danger" ${s.caseStatus==='closed'?'disabled':''}><i class="fas fa-times"></i> Close</button>
+      </div>
+    </div>`).join('');
+}
+async function viewDetail(uid){
+  showLoader('Loading…');
+  try{
+    const d=await apiCall(`/api/counsellor/students/${uid}/detail`);
+    const u=d.student||{}; const r=d.risk||{};
+    document.getElementById('drawer-content').innerHTML=`
+      <div style="font-size:20px;font-weight:700">${u.name}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${u.customId}</div>
+      <div class="section-title" style="font-size:13px;margin-bottom:8px">Risk Score: <span style="color:${r.level==='HIGH'?'#EF4444':r.level==='MEDIUM'?'#F59E0B':'#10B981'}">${r.score||0} (${r.level||'LOW'})</span></div>
+      <div class="section-title" style="font-size:13px;margin:12px 0 8px">Mood History</div>
+      ${(d.moodHistory||[]).slice(0,7).map(m=>`<div style="display:flex;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--divider)"><span>${m.date||'—'}</span><span style="font-weight:600">${m.mood}</span></div>`).join('')}
+      <div class="section-title" style="font-size:13px;margin:12px 0 8px">Session Notes</div>
+      ${(d.sessionNotes||[]).slice(0,3).map(n=>`<div style="font-size:12px;padding:8px;background:var(--glass-bg);border-radius:8px;margin-bottom:6px">${n.notes||'—'}</div>`).join('')||'<div style="color:var(--text-muted);font-size:12px">No notes yet</div>'}
+      <button onclick="openReport('/api/reports/student/${uid}')" class="btn btn-primary btn-sm" style="margin-top:16px"><i class="fas fa-file-pdf"></i> Download Report</button>`;
+    document.getElementById('detail-drawer').style.display='block';
+  }catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+async function closeCase(uid,name){
+  const msg=prompt(`Closing message for ${name}:`);
+  if(!msg)return;
+  try{await apiCall(`/api/counsellor/cases/${uid}/close`,'POST',{closingMessage:msg});showToast('Case closed','success');onPageReady();}
+  catch(e){showToast(e.message,'error');}
+}
+function closeDrawer(){document.getElementById('detail-drawer').style.display='none';}
+</script>
+{% endblock %}

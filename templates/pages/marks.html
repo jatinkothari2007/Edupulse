@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Marks — EduPulse{% endblock %}
+{% block page_title %}Marks & Grades{% endblock %}
+{% block page_roles_check %}requireLogin();{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/teacher"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/notes"><i class="fas fa-sticky-note"></i>Notes</a>
+<a class="nav-link" href="/pages/attendance"><i class="fas fa-calendar-check"></i>Attendance</a>
+<a class="nav-link" href="/pages/assignments"><i class="fas fa-tasks"></i>Assignments</a>
+<a class="nav-link" href="/pages/marks"><i class="fas fa-star"></i>Marks</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Marks & Grades</div>
+<div class="page-subtitle">View and manage student marks</div>
+<div id="teacher-section" style="display:none">
+  <div class="glass-card" style="padding:24px;margin-bottom:20px">
+    <div class="filter-row">
+      <input class="form-input" id="m-class" placeholder="Class ID" style="width:180px">
+      <input class="form-input" id="m-subject" placeholder="Subject ID" style="width:180px">
+      <input class="form-input" id="m-assignment" placeholder="Assignment ID (optional)" style="width:200px">
+      <button class="btn btn-primary btn-sm" onclick="loadMarksData()"><i class="fas fa-search"></i>Load Students</button>
+    </div>
+  </div>
+  <div class="glass-card" style="padding:24px" id="marks-entry-section" style="display:none">
+    <div class="section-header"><span class="section-title">Enter Marks</span>
+      <button class="btn btn-primary btn-sm" onclick="saveAllMarks()"><i class="fas fa-save"></i>Save All</button>
+    </div>
+    <div id="marks-list" style="margin-top:12px"></div>
+  </div>
+</div>
+<div id="student-section" style="display:none">
+  <div class="grid-auto" id="student-marks-grid">
+    <div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let marksStudents=[],marksData={};
+async function onPageReady(user){
+  if(user.role==='student'){
+    document.getElementById('student-section').style.display='block';
+    await loadStudentMarks();
+  } else if(['subject_teacher','faculty_advisor','admin'].includes(user.role)){
+    document.getElementById('teacher-section').style.display='block';
+  }
+}
+async function loadStudentMarks(){
+  try{
+    const r=await apiCall('/api/student/marks');
+    const data=r.data||[];
+    const grid=document.getElementById('student-marks-grid');
+    if(!data.length){grid.innerHTML='<div class="empty-state"><i class="fas fa-star"></i><h3>No marks yet</h3></div>';return;}
+    grid.innerHTML=data.map(m=>{
+      const pct=m.maxMarks?Math.round((m.marks/m.maxMarks)*100):0;
+      const col=pct>=75?'#10B981':pct>=50?'#F59E0B':'#EF4444';
+      return `<div class="glass-card" style="padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div><div style="font-size:14px;font-weight:700">${m.subjectName||m.subjectId||'—'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${m.type||'Assessment'}</div></div>
+          <div style="font-size:26px;font-weight:800;color:${col}">${m.marks}</div>
+        </div>
+        <div style="height:8px;background:rgba(167,139,250,0.15);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${col};border-radius:4px;transition:width 1s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text-muted)">
+          <span>${pct}%</span><span>Out of ${m.maxMarks||100}</span>
+        </div>
+      </div>`;
+    }).join('');
+    if(window.reinitTilt)window.reinitTilt();
+  }catch(e){showToast('Failed to load marks','error');}
+}
+async function loadMarksData(){
+  const classId=document.getElementById('m-class').value.trim(),subjectId=document.getElementById('m-subject').value.trim();
+  if(!classId||!subjectId){showToast('Class ID and Subject ID required','warning');return;}
+  showLoader();try{
+    const r=await apiCall('/api/teacher/marks?classId='+classId+'&subjectId='+subjectId);
+    const students=r.data||[];
+    marksStudents=students;
+    document.getElementById('marks-entry-section').style.display='block';
+    const ml=document.getElementById('marks-list');
+    if(!students.length){ml.innerHTML='<div class="empty-state">No students found</div>';return;}
+    ml.innerHTML=students.map((s,i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(167,139,250,0.12)">
+        <div><div style="font-size:13px;font-weight:600">${s.name||s.studentId}</div><div style="font-size:11px;color:var(--text-muted)">${s.studentId}</div></div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;color:var(--text-muted)">Current: ${s.marks??'—'}</span>
+          <input type="number" id="mark_${i}" value="${s.marks||''}" min="0" max="${s.maxMarks||100}" placeholder="0-${s.maxMarks||100}" class="form-input" style="width:80px;padding:8px 12px;border-radius:10px;font-size:13px;">
+          <span style="font-size:12px;color:var(--text-muted)">/ ${s.maxMarks||100}</span>
+        </div>
+      </div>`).join('');
+  }catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+async function saveAllMarks(){
+  const classId=document.getElementById('m-class').value.trim(),subjectId=document.getElementById('m-subject').value.trim(),assignmentId=document.getElementById('m-assignment').value.trim();
+  const records=marksStudents.map((s,i)=>({studentId:s.studentId,marks:parseFloat(document.getElementById('mark_'+i).value)||0,maxMarks:s.maxMarks||100,subjectId,assignmentId}));
+  showLoader();try{await apiCall('/api/teacher/marks','POST',{classId,records});showToast(records.length+' marks saved!','success');}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+</script>
+{% endblock %}

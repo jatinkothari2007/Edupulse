@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Manage Users — EduPulse{% endblock %}
+{% block page_title %}Manage Users{% endblock %}
+{% block page_roles_check %}requireLogin(['admin']);{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/admin"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/users"><i class="fas fa-users"></i>Manage Users</a>
+<a class="nav-link" href="/pages/classes"><i class="fas fa-chalkboard"></i>Classes</a>
+<a class="nav-link" href="/pages/audit-logs"><i class="fas fa-history"></i>Audit Logs</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Manage Users</div>
+<div class="page-subtitle">Create, edit, and manage all system accounts</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div class="filter-row">
+    <div class="search-bar" style="width:240px">
+      <i class="fas fa-search"></i>
+      <input type="text" placeholder="Search users..." id="user-search" oninput="filterUsers(this.value)">
+    </div>
+    <select class="form-input form-select" id="role-filter" style="width:180px" onchange="filterUsers(document.getElementById('user-search').value)">
+      <option value="">All Roles</option>
+      <option value="admin">Admin</option>
+      <option value="student_advisor">Student Advisor</option>
+      <option value="faculty_advisor">Faculty Advisor</option>
+      <option value="subject_teacher">Subject Teacher</option>
+      <option value="counsellor">Counsellor</option>
+      <option value="student">Student</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" onclick="openCreateUserModal()"><i class="fas fa-user-plus"></i>Create User</button>
+</div>
+<div class="table-wrapper">
+  <table class="data-table" id="users-table">
+    <thead><tr>
+      <th onclick="sortUsersTable(0,this)">Name <span class="sort-icon"></span></th>
+      <th onclick="sortUsersTable(1,this)">Email <span class="sort-icon"></span></th>
+      <th onclick="sortUsersTable(2,this)">Role <span class="sort-icon"></span></th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="users-body"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading users...</td></tr></tbody>
+  </table>
+  <div class="pagination" id="users-pagination"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allUsers=[],usersPage=1;const PER=10;
+async function onPageReady(){await loadUsers();}
+async function loadUsers(){
+  try{const r=await apiCall('/api/admin/users');allUsers=r.data||[];renderUsers(allUsers,1);}
+  catch(e){showToast('Failed to load users','error');}
+}
+function filterUsers(q){
+  const role=document.getElementById('role-filter').value;
+  let f=allUsers;
+  if(role)f=f.filter(u=>u.role===role);
+  if(q)f=f.filter(u=>(u.name||'').toLowerCase().includes(q.toLowerCase())||(u.email||'').toLowerCase().includes(q.toLowerCase()));
+  renderUsers(f,1);
+}
+function renderUsers(data,page){
+  usersPage=page;const start=(page-1)*PER,slice=data.slice(start,start+PER);
+  const tb=document.getElementById('users-body');
+  if(!slice.length){tb.innerHTML='<tr><td colspan="5" class="empty-state">No users found</td></tr>';return;}
+  const roleLabels={admin:'Admin',student_advisor:'Advisor',faculty_advisor:'Faculty Adv.',subject_teacher:'Teacher',counsellor:'Counsellor',student:'Student'};
+  tb.innerHTML=slice.map(u=>`<tr>
+    <td><div style="display:flex;align-items:center;gap:10px"><div class="user-avatar" style="width:32px;height:32px;font-size:12px">${(u.name||'?')[0].toUpperCase()}</div>${u.name||'—'}</div></td>
+    <td>${u.email||'—'}</td>
+    <td><span class="badge badge-role">${roleLabels[u.role]||u.role}</span></td>
+    <td><span class="badge" style="${u.isActive?'background:rgba(16,185,129,0.12);color:#059669':'background:rgba(239,68,68,0.12);color:#DC2626'}">${u.isActive?'Active':'Inactive'}</span></td>
+    <td style="display:flex;gap:6px">
+      <button class="btn btn-sm" style="background:rgba(123,47,255,0.10);color:#7B2FFF" onclick="editUser('${u.uid}','${u.name}','${u.role}')"><i class="fas fa-edit"></i></button>
+      <button class="btn btn-danger btn-sm" onclick="deactivateUser('${u.uid}','${u.name}')"><i class="fas fa-ban"></i></button>
+      <button class="btn btn-warning btn-sm" onclick="resetPassword('${u.uid}')"><i class="fas fa-key"></i></button>
+    </td>
+  </tr>`).join('');
+  renderPg('users-pagination',Math.ceil(data.length/PER),page,(p)=>renderUsers(data,p));
+}
+function renderPg(id,total,cur,fn){
+  const el=document.getElementById(id);if(!el||total<=1){if(el)el.innerHTML='';return;}
+  el.innerHTML=Array.from({length:total},(_,i)=>i+1).map(i=>`<button class="page-btn ${i===cur?'active':''}" onclick="(${fn.toString()})(${i})">${i}</button>`).join('');
+}
+function sortUsersTable(col,th){
+  const tb=document.getElementById('users-table').querySelector('tbody');
+  const rows=Array.from(tb.querySelectorAll('tr'));
+  const asc=th.classList.contains('sorted-asc');
+  document.querySelectorAll('#users-table th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc'));
+  th.classList.add(asc?'sorted-desc':'sorted-asc');
+  rows.sort((a,b)=>{const av=(a.cells[col]||{}).innerText||'',bv=(b.cells[col]||{}).innerText||'';return asc?bv.localeCompare(av):av.localeCompare(bv);});
+  rows.forEach(r=>tb.appendChild(r));
+}
+function openCreateUserModal(){
+  openModal('Create New User',`
+    <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="m-name" placeholder="Full name"></div>
+    <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="m-email" type="email" placeholder="Email"></div>
+    <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="m-pass" type="password" placeholder="Min 6 chars"></div>
+    <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="m-role"><option value="student">Student</option><option value="subject_teacher">Subject Teacher</option><option value="faculty_advisor">Faculty Advisor</option><option value="counsellor">Counsellor</option><option value="student_advisor">Student Advisor</option><option value="admin">Admin</option></select></div>`,async()=>{
+    const d={name:document.getElementById('m-name').value.trim(),email:document.getElementById('m-email').value.trim(),password:document.getElementById('m-pass').value,role:document.getElementById('m-role').value};
+    if(!d.name||!d.email||!d.password){showToast('All fields required','warning');return;}
+    showLoader();try{await apiCall('/api/admin/users','POST',d);closeModal();showToast('User created!','success');loadUsers();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+function editUser(uid,name,role){
+  openModal('Edit User',`
+    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="m-name" value="${name}"></div>
+    <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="m-role"><option value="student" ${role==='student'?'selected':''}>Student</option><option value="subject_teacher" ${role==='subject_teacher'?'selected':''}>Subject Teacher</option><option value="faculty_advisor" ${role==='faculty_advisor'?'selected':''}>Faculty Advisor</option><option value="counsellor" ${role==='counsellor'?'selected':''}>Counsellor</option><option value="student_advisor" ${role==='student_advisor'?'selected':''}>Student Advisor</option><option value="admin" ${role==='admin'?'selected':''}>Admin</option></select></div>`,async()=>{
+    showLoader();try{await apiCall('/api/admin/users/'+uid,'PUT',{name:document.getElementById('m-name').value,role:document.getElementById('m-role').value});closeModal();showToast('User updated!','success');loadUsers();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+async function deactivateUser(uid,name){
+  if(!confirm('Deactivate '+name+'?'))return;
+  showLoader();try{await apiCall('/api/admin/users/'+uid+'/deactivate','POST');showToast('User deactivated','success');loadUsers();}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+}
+function resetPassword(uid){
+  openModal('Reset Password',`
+    <div class="form-group"><label class="form-label">New Password</label><input class="form-input" id="m-np" type="password" placeholder="Min 6 chars"></div>`,async()=>{
+    const np=document.getElementById('m-np').value;
+    if(np.length<6){showToast('Min 6 characters','warning');return;}
+    showLoader();try{await apiCall('/api/admin/users/'+uid+'/reset-password','POST',{newPassword:np});closeModal();showToast('Password reset!','success');}catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}

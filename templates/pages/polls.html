@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Polls — EduPulse{% endblock %}
+{% block page_title %}Polls{% endblock %}
+{% block page_roles_check %}requireLogin();{% endblock %}
+{% block sidebar_nav %}
+<a class="nav-link" href="/dashboard/advisor"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
+<a class="nav-link" href="/pages/classes"><i class="fas fa-chalkboard"></i>Classes</a>
+<a class="nav-link" href="/pages/polls"><i class="fas fa-poll"></i>Polls</a>
+<a class="nav-link" href="/pages/messaging"><i class="fas fa-comments"></i>Messages</a>
+{% endblock %}
+{% block content %}
+<div class="page-title">Polls</div>
+<div class="page-subtitle">Create and respond to class polls</div>
+<div class="section-header" style="margin-bottom:16px">
+  <div></div>
+  <button class="btn btn-primary" id="create-poll-btn" style="display:none" onclick="openPollModal()"><i class="fas fa-plus"></i>Create Poll</button>
+</div>
+<div id="polls-container">
+  <div style="text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let allPolls=[];
+async function onPageReady(user){
+  if(['admin','student_advisor','faculty_advisor','subject_teacher'].includes(user.role)){
+    document.getElementById('create-poll-btn').style.display='flex';
+  }
+  await loadPolls(user.role);
+}
+async function loadPolls(role){
+  try{
+    let r;
+    if(role==='student') r=await apiCall('/api/student/polls');
+    else if(role==='subject_teacher') r=await apiCall('/api/teacher/polls');
+    else r=await apiCall('/api/advisor/polls');
+    allPolls=r.data||[];renderPolls(allPolls,role);
+  }catch(e){showToast('Failed to load polls','error');}
+}
+function renderPolls(data,role){
+  const el=document.getElementById('polls-container');
+  if(!data.length){el.innerHTML='<div class="empty-state"><i class="fas fa-poll" style="font-size:48px"></i><h3>No polls yet</h3><p>Create a poll to gather student feedback</p></div>';return;}
+  el.innerHTML=data.map(p=>{
+    const total=(p.options||[]).reduce((acc,o)=>acc+(o.votes||[]).length,0);
+    const isHidden = p.teacherOnly && role === 'student';
+    return `<div class="glass-card" style="padding:24px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+        <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);flex:1">${p.question}</h3>
+        <span style="font-size:12px;color:var(--text-muted);margin-left:16px">${isHidden ? '<i class="fas fa-eye-slash"></i> Results hidden' : total + ' votes'}</span>
+      </div>
+      ${(p.options||[]).map((opt,i)=>{
+        const votes=(opt.votes||[]).length;const pct=total?Math.round(votes/total*100):0;
+        const voted=(opt.votes||[]).includes(window.currentUser?.uid);
+        return `<div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:${voted?'700':'400'};color:var(--text-primary)">${opt.text}</span>
+            <span style="font-size:12px;color:var(--text-muted)">${isHidden ? (voted ? 'Your vote' : '') : pct + '% (' + votes + ')'}</span>
+          </div>
+          <div style="height:8px;background:rgba(167,139,250,0.15);border-radius:4px;overflow:hidden;cursor:${role==='student'?'pointer':'default'}" onclick="${role==='student'?`votePoll('${p.id}',${i})`:''}">
+            <div style="height:100%;width:${isHidden ? (voted?100:0) : pct}%;background:${voted?'linear-gradient(90deg,#7B2FFF,#A78BFA)':'rgba(167,139,250,0.35)'};border-radius:4px;transition:width 0.8s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  if(window.reinitTilt)window.reinitTilt();
+}
+async function votePoll(pollId,optionIndex){
+  try{await apiCall('/api/student/polls/'+pollId+'/vote','POST',{optionIndex});showToast('Vote submitted!','success');loadPolls('student');}
+  catch(e){showToast(e.message,'error');}
+}
+function openPollModal(){
+  openModal('Create Poll',`
+    <div class="form-group"><label class="form-label">Question</label><input class="form-input" id="m-q" placeholder="Your question..."></div>
+    <div class="form-group"><label class="form-label">Options (one per line, min 2)</label><textarea class="form-input" id="m-opts" rows="5" placeholder="Option A\nOption B\nOption C"></textarea></div>`,async()=>{
+    const q=document.getElementById('m-q').value.trim();
+    const opts=document.getElementById('m-opts').value.split('\n').map(o=>o.trim()).filter(Boolean);
+    if(!q||opts.length<2){showToast('Question and at least 2 options required','warning');return;}
+    showLoader();try{
+      const endpoint = window.currentUser?.role === 'subject_teacher' ? '/api/teacher/polls' : '/api/advisor/polls';
+      await apiCall(endpoint,'POST',{question:q,options:opts});
+      closeModal();showToast('Poll created!','success');loadPolls(window.currentUser?.role);
+    }catch(e){showToast(e.message,'error');}finally{hideLoader();}
+  });
+}
+</script>
+{% endblock %}
