@@ -1,0 +1,3 @@
+"""
+EduPulse routes package initializer.
+"""
