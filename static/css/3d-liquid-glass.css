@@ -1,0 +1,229 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EduPulse — 3D Liquid Glass Design System
+   Complete CSS variables: dark + light themes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared constants ──────────────────────────────────────────────────── */
+html {
+  --radius:    16px;
+  --radius-sm: 10px;
+  --radius-xs: 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK THEME (default — data-theme="dark" or no data-theme)
+   ══════════════════════════════════════════════════════════════════════════ */
+html[data-theme="dark"], html:not([data-theme="light"]) {
+  /* Backgrounds */
+  --bg-body:           #0D0D1A;
+  --bg:                #0D0D1A;
+  --bg-secondary:      #12121F;
+  --bg-tertiary:       #17172A;
+
+  /* Text */
+  --text-primary:      #F1F0FF;
+  --text-heading:      #FFFFFF;
+  --text-secondary:    #A9A6C6;
+  --text-muted:        #6B6882;
+  --text-label:        #9896B4;
+
+  /* Purple palette */
+  --purple-primary:    #7B2FFF;
+  --purple-light:      #A78BFA;
+  --purple-dark:       #5B21D6;
+  --purple-glow:       rgba(123,47,255,0.22);
+
+  /* Status colors */
+  --success:           #10B981;
+  --warning:           #F59E0B;
+  --danger:            #EF4444;
+  --mint-glow:         rgba(45,212,191,0.28);
+
+  /* Glass surfaces */
+  --glass-bg:          rgba(255,255,255,0.04);
+  --glass-bg-strong:   rgba(255,255,255,0.09);
+  --glass-border:      rgba(255,255,255,0.09);
+  --glass-shine:       rgba(255,255,255,0.14);
+
+  /* Cards */
+  --card-bg:           rgba(255,255,255,0.04);
+  --card-border:       rgba(255,255,255,0.09);
+  --card-shadow:       0 4px 24px rgba(0,0,0,0.32), 0 1px 3px rgba(0,0,0,0.24);
+  --card-shadow-hover: 0 16px 48px rgba(0,0,0,0.42), 0 4px 12px rgba(123,47,255,0.18);
+
+  /* Sidebar */
+  --sidebar-bg:          rgba(10,10,22,0.94);
+  --sidebar-border:      rgba(255,255,255,0.07);
+  --sidebar-text:        #C4C2DC;
+  --sidebar-text-muted:  #6B6882;
+  --sidebar-icon:        #8B89A8;
+  --sidebar-hover-bg:    rgba(255,255,255,0.05);
+  --sidebar-active-bg:   rgba(123,47,255,0.14);
+  --sidebar-active-text: #F1F0FF;
+
+  /* Header */
+  --header-bg:           rgba(10,10,22,0.90);
+  --header-border:       rgba(255,255,255,0.07);
+  --header-text:         #F1F0FF;
+
+  /* Theme button */
+  --theme-btn-bg:        rgba(255,255,255,0.06);
+  --theme-btn-border:    rgba(255,255,255,0.11);
+  --theme-btn-text:      #A9A6C6;
+
+  /* Modal */
+  --modal-bg:            rgba(13,13,26,0.96);
+  --modal-overlay:       rgba(0,0,0,0.65);
+
+  /* Inputs */
+  --input-bg:            rgba(255,255,255,0.05);
+  --input-bg-focus:      rgba(255,255,255,0.09);
+  --input-border:        rgba(255,255,255,0.11);
+  --input-text:          #F1F0FF;
+  --input-placeholder:   #6B6882;
+
+  /* Table */
+  --table-header-bg:     rgba(255,255,255,0.04);
+  --table-header-text:   #9896B4;
+  --table-border:        rgba(255,255,255,0.06);
+  --table-row-even:      rgba(255,255,255,0.025);
+  --table-row-odd:       transparent;
+  --table-row-hover:     rgba(123,47,255,0.07);
+  --table-text:          #E8E7FF;
+
+  /* Badges */
+  --badge-low-bg:        rgba(16,185,129,0.14);
+  --badge-low-text:      #10B981;
+  --badge-medium-bg:     rgba(245,158,11,0.14);
+  --badge-medium-text:   #F59E0B;
+  --badge-high-bg:       rgba(239,68,68,0.14);
+  --badge-high-text:     #EF4444;
+
+  /* Misc */
+  --divider:             rgba(255,255,255,0.07);
+  --loader-bg:           rgba(13,13,26,0.82);
+  --scrollbar-track:     rgba(255,255,255,0.04);
+  --scrollbar-thumb:     rgba(255,255,255,0.13);
+
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME
+   ══════════════════════════════════════════════════════════════════════════ */
+html[data-theme="light"] {
+  /* Backgrounds */
+  --bg-body:           #EDE9FF;
+  --bg:                #EDE9FF;
+  --bg-secondary:      #E4DFFF;
+  --bg-tertiary:       #EDE9FF;
+
+  /* Text */
+  --text-primary:      #1E1B4B;
+  --text-heading:      #0F0D2E;
+  --text-secondary:    #4C4775;
+  --text-muted:        #8C89A8;
+  --text-label:        #5B5880;
+
+  /* Purple palette */
+  --purple-primary:    #6D28D9;
+  --purple-light:      #8B5CF6;
+  --purple-dark:       #5B21B6;
+  --purple-glow:       rgba(109,40,217,0.16);
+
+  /* Status */
+  --success:           #059669;
+  --warning:           #D97706;
+  --danger:            #DC2626;
+  --mint-glow:         rgba(45,212,191,0.22);
+
+  /* Glass surfaces */
+  --glass-bg:          rgba(255,255,255,0.60);
+  --glass-bg-strong:   rgba(255,255,255,0.82);
+  --glass-border:      rgba(109,40,217,0.12);
+  --glass-shine:       rgba(255,255,255,0.85);
+
+  /* Cards */
+  --card-bg:           rgba(255,255,255,0.68);
+  --card-border:       rgba(109,40,217,0.10);
+  --card-shadow:       0 4px 24px rgba(109,40,217,0.08), 0 1px 3px rgba(0,0,0,0.05);
+  --card-shadow-hover: 0 16px 48px rgba(109,40,217,0.16), 0 4px 12px rgba(109,40,217,0.10);
+
+  /* Sidebar */
+  --sidebar-bg:          rgba(237,233,255,0.92);
+  --sidebar-border:      rgba(109,40,217,0.10);
+  --sidebar-text:        #3B3869;
+  --sidebar-text-muted:  #8C89A8;
+  --sidebar-icon:        #6B68A8;
+  --sidebar-hover-bg:    rgba(109,40,217,0.06);
+  --sidebar-active-bg:   rgba(109,40,217,0.10);
+  --sidebar-active-text: #4C1D95;
+
+  /* Header */
+  --header-bg:           rgba(237,233,255,0.90);
+  --header-border:       rgba(109,40,217,0.10);
+  --header-text:         #0F0D2E;
+
+  /* Theme button */
+  --theme-btn-bg:        rgba(255,255,255,0.70);
+  --theme-btn-border:    rgba(109,40,217,0.16);
+  --theme-btn-text:      #4C4775;
+
+  /* Modal */
+  --modal-bg:            rgba(255,255,255,0.96);
+  --modal-overlay:       rgba(30,27,75,0.40);
+
+  /* Inputs */
+  --input-bg:            rgba(255,255,255,0.80);
+  --input-bg-focus:      rgba(255,255,255,0.96);
+  --input-border:        rgba(109,40,217,0.16);
+  --input-text:          #1E1B4B;
+  --input-placeholder:   #8C89A8;
+
+  /* Table */
+  --table-header-bg:     rgba(109,40,217,0.05);
+  --table-header-text:   #5B5880;
+  --table-border:        rgba(109,40,217,0.08);
+  --table-row-even:      rgba(109,40,217,0.03);
+  --table-row-odd:       transparent;
+  --table-row-hover:     rgba(109,40,217,0.07);
+  --table-text:          #1E1B4B;
+
+  /* Badges */
+  --badge-low-bg:        rgba(5,150,105,0.10);
+  --badge-low-text:      #047857;
+  --badge-medium-bg:     rgba(217,119,6,0.10);
+  --badge-medium-text:   #B45309;
+  --badge-high-bg:       rgba(220,38,38,0.10);
+  --badge-high-text:     #DC2626;
+
+  /* Misc */
+  --divider:             rgba(109,40,217,0.09);
+  --loader-bg:           rgba(237,233,255,0.82);
+  --scrollbar-track:     rgba(109,40,217,0.05);
+  --scrollbar-thumb:     rgba(109,40,217,0.22);
+
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+}
+
+/* ── Base element styles (shared) ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; color: var(--text-heading); line-height: 1.25;
+}
+
+a { color: var(--purple-primary); text-decoration: none; }
+a:hover { color: var(--purple-light); }
+img { max-width: 100%; height: auto; display: block; }
+select, textarea { font-family: 'Inter', sans-serif; font-size: 14px; }

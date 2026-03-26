@@ -1,0 +1,205 @@
+/* ═══════════════════════════════════════════════════════════
+   EduPulse — Portal Page Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Canvas BG ─────────────────────────────────────────── */
+#particle-canvas {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+
+/* ── Wrapper ────────────────────────────────────────────── */
+.portal-wrapper {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 40px 20px 60px;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.portal-header {
+  text-align: center;
+  margin-bottom: 44px;
+}
+
+.portal-logo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1px;
+}
+.portal-logo .edu   { color: var(--text-heading); }
+.portal-logo .pulse { color: var(--purple-primary); }
+
+.portal-tagline {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  letter-spacing: 0.3px;
+}
+
+/* ── Section heading ────────────────────────────────────── */
+.portal-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(22px, 3vw, 34px);
+  font-weight: 700;
+  color: var(--text-heading);
+  margin-bottom: 8px;
+  text-align: center;
+}
+.portal-subtitle {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 48px;
+  text-align: center;
+}
+
+/* ── Role Grid ──────────────────────────────────────────── */
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  width: 100%;
+  max-width: 1120px;
+}
+
+/* ── Role Card ──────────────────────────────────────────── */
+.role-card {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  padding: 32px 28px;
+  cursor: pointer;
+  overflow: hidden;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: var(--card-shadow);
+  transition:
+    transform 0.32s cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 0.32s cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 0.25s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Top-shine line */
+.role-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-shine, rgba(255,255,255,0.15)), transparent);
+  pointer-events: none;
+}
+
+.role-card:hover {
+  transform: translateY(-10px) scale(1.025);
+  box-shadow: var(--card-shadow-hover, 0 24px 60px rgba(0,0,0,0.22));
+  border-color: rgba(123, 47, 255, 0.25);
+}
+.role-card:active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+
+/* ── Glow blob ──────────────────────────────────────────── */
+.role-glow {
+  position: absolute; top: -40px; right: -40px;
+  width: 140px; height: 140px; border-radius: 50%;
+  background: var(--glow, #7B2FFF);
+  opacity: 0.10;
+  filter: blur(50px);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.role-card:hover .role-glow { opacity: 0.25; }
+
+/* ── Icon ───────────────────────────────────────────────── */
+.role-icon-wrap {
+  width: 60px; height: 60px; border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: white;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.role-card:hover .role-icon-wrap {
+  transform: scale(1.12) rotate(-4deg);
+}
+
+/* ── Text ───────────────────────────────────────────────── */
+.role-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px; font-weight: 700;
+  color: var(--text-heading);
+  margin: 0 0 8px;
+}
+.role-desc {
+  font-size: 13px; color: var(--text-secondary);
+  line-height: 1.6; margin-bottom: 22px;
+}
+
+/* ── Arrow ──────────────────────────────────────────────── */
+.role-arrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 18px; color: var(--purple-primary);
+  transition: transform 0.25s ease, gap 0.2s ease;
+}
+.role-card:hover .role-arrow {
+  transform: translateX(6px);
+}
+
+/* ── Footer ─────────────────────────────────────────────── */
+.portal-footer {
+  margin-top: 56px;
+  font-size: 13px; color: var(--text-muted); text-align: center;
+}
+
+/* ── Loader ─────────────────────────────────────────────── */
+.portal-loader {
+  display: none; position: fixed; inset: 0; z-index: 999;
+  background: var(--loader-bg, rgba(13,13,26,0.7));
+  backdrop-filter: blur(8px);
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 18px;
+}
+.portal-loader.show { display: flex; }
+
+.portal-loader-ring {
+  width: 52px; height: 52px; border-radius: 50%;
+  border: 4px solid var(--glass-border);
+  border-top-color: var(--purple-primary);
+  animation: portal-spin 0.7s linear infinite;
+}
+@keyframes portal-spin { to { transform: rotate(360deg); } }
+
+.portal-loader-text {
+  font-size: 15px; font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* ── Theme toggle on portal ─────────────────────────────── */
+.theme-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 18px; border-radius: 50px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; backdrop-filter: blur(12px);
+  transition: all 0.22s ease;
+}
+.theme-btn:hover {
+  background: rgba(123, 47, 255, 0.12);
+  color: var(--purple-primary);
+  border-color: rgba(123, 47, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .role-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 540px) {
+  .role-grid { grid-template-columns: 1fr; }
+  .portal-wrapper { padding: 28px 16px 40px; }
+}

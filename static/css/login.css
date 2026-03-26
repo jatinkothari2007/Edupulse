@@ -1,0 +1,193 @@
+/* ═══════════════════════════════════════════════════════════════
+   EduPulse — Login Page CSS
+   (standalone page — does NOT use base.html / components.css)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Reset & body ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg, #0D0D1A);
+  color: var(--text-primary, #F1F0FF);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+#particle-canvas {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+
+/* ── Page layout ─────────────────────────────────────────── */
+.login-page {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.login-card {
+  max-width: 440px;
+  width: 100%;
+  padding: 36px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* glass-card styles (also in 3d-liquid-glass.css, but repeat for safety) */
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: var(--card-shadow);
+}
+
+/* ── Back button ─────────────────────────────────────────── */
+.login-back-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-secondary, #8B89A8);
+  text-decoration: none;
+  margin-bottom: 20px;
+  transition: color 0.2s;
+}
+.login-back-btn:hover { color: var(--purple-primary, #7B2FFF); }
+
+/* ── Role display badge ──────────────────────────────────── */
+.role-display {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+.role-icon-mini {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #7B2FFF, #A78BFA);
+}
+.role-label    { font-weight: 700; font-size: 14px; color: var(--text-heading, #F1F0FF); }
+.role-sublabel { font-size: 12px; color: var(--text-muted, #6B6882); margin-top: 3px; }
+
+/* ── Login header ────────────────────────────────────────── */
+.login-header { margin-bottom: 14px; }
+
+.login-logo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 30px; font-weight: 800; letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+.login-logo .edu   { color: var(--text-heading, #1E1B4B); }
+.login-logo .pulse { color: var(--purple-primary, #7B2FFF); }
+
+.login-tagline { font-size: 14px; color: var(--text-secondary, #8B89A8); }
+
+/* ── Theme toggle ────────────────────────────────────────── */
+.theme-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 50px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  color: var(--text-secondary, #8B89A8);
+  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600;
+  cursor: pointer; backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  align-self: flex-end;
+  margin-bottom: 12px;
+}
+.theme-btn:hover {
+  color: var(--purple-primary, #7B2FFF);
+  border-color: rgba(123,47,255,0.4);
+  background: rgba(123,47,255,0.08);
+}
+
+/* ── Form ────────────────────────────────────────────────── */
+.form-group { margin-bottom: 18px; }
+
+.form-label {
+  display: block; margin-bottom: 7px;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-secondary, #8B89A8);
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--glass-border, rgba(255,255,255,0.08));
+  background: var(--glass-bg, rgba(255,255,255,0.04));
+  color: var(--text-primary, #F1F0FF);
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+.form-input:focus {
+  border-color: var(--purple-primary, #7B2FFF);
+  box-shadow: 0 0 0 3px rgba(123,47,255,0.15);
+}
+.form-input::placeholder { color: var(--text-muted, #6B6882); }
+
+/* ── Password toggle ─────────────────────────────────────── */
+.pwd-toggle {
+  position: absolute;
+  right: 14px; bottom: 12px;
+  background: none; border: none;
+  color: var(--text-muted, #6B6882);
+  cursor: pointer; font-size: 15px;
+  transition: color 0.2s;
+}
+.pwd-toggle:hover { color: var(--purple-primary, #7B2FFF); }
+
+/* ── Error box ───────────────────────────────────────────── */
+.login-error {
+  display: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #F87171;
+  font-size: 13px; line-height: 1.5;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-radius: 12px; border: none;
+  cursor: pointer; font-size: 14px; font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.2s cubic-bezier(0.23,1,0.32,1);
+  text-decoration: none; white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #7B2FFF, #A78BFA);
+  color: white;
+  box-shadow: 0 4px 18px rgba(123,47,255,0.28);
+}
+.btn-primary:hover { box-shadow: 0 8px 28px rgba(123,47,255,0.38); }
+
+/* Spinner */
+@keyframes ep-spin { to { transform: rotate(360deg); } }
+.fa-spin { animation: ep-spin 0.8s linear infinite !important; }
+
+/* ── Footer ──────────────────────────────────────────────── */
+.login-footer {
+  margin-top: 20px;
+  font-size: 12px; color: var(--text-muted, #6B6882);
+  text-align: center;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .login-card { padding: 28px 24px; }
+}

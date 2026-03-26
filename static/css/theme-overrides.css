@@ -1,0 +1,72 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   EduPulse — theme-overrides.css
+   Fine-grained overrides layered on top of 3d-liquid-glass.css variables.
+   Applied after the base design system for any page-specific tweaks.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark mode extra tweaks ──────────────────────────── */
+html[data-theme="dark"] {
+  /* Stronger glass on key panels */
+  --sidebar-bg:        rgba(8, 8, 18, 0.96);
+  --header-bg:         rgba(8, 8, 18, 0.92);
+
+  /* Pulse gradient used in branding */
+  --brand-gradient:    linear-gradient(135deg, #7B2FFF 0%, #A78BFA 100%);
+  --brand-gradient-h:  linear-gradient(135deg, #5B21D6 0%, #7B2FFF 100%);
+
+  /* Card hover lift */
+  --card-shadow-hover: 0 20px 56px rgba(0,0,0,0.48), 0 6px 16px rgba(123,47,255,0.22);
+
+  /* Selection colour */
+  ::selection { background: rgba(123,47,255,0.30); color: #F1F0FF; }
+}
+
+/* ── Light mode extra tweaks ─────────────────────────── */
+html[data-theme="light"] {
+  /* Crisper glass cards in light mode */
+  --glass-bg:          rgba(255, 255, 255, 0.72);
+  --glass-bg-strong:   rgba(255, 255, 255, 0.90);
+  --card-bg:           rgba(255, 255, 255, 0.78);
+
+  /* Sidebar slightly more saturated */
+  --sidebar-bg:        rgba(232, 228, 255, 0.94);
+
+  /* Pulse gradient */
+  --brand-gradient:    linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%);
+  --brand-gradient-h:  linear-gradient(135deg, #5B21B6 0%, #6D28D9 100%);
+
+  /* Softer card hover in light */
+  --card-shadow-hover: 0 16px 48px rgba(109,40,217,0.18), 0 4px 14px rgba(109,40,217,0.12);
+
+  /* Selection */
+  ::selection { background: rgba(109,40,217,0.18); color: #1E1B4B; }
+}
+
+/* ── Shared brand utilities ──────────────────────────── */
+.brand-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-gradient-bg {
+  background: var(--brand-gradient);
+}
+
+/* ── Focus ring ──────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--purple-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Print ───────────────────────────────────────────── */
+@media print {
+  .sidebar, .top-header, #particle-canvas,
+  .global-loader, .sidebar-overlay { display: none !important; }
+  .page-content { padding: 0; overflow: visible; }
+  .app-wrapper  { height: auto; overflow: visible; }
+  .main-content { overflow: visible; }
+  .glass-card   { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+}
