@@ -1,0 +1,8 @@
+flask
+firebase-admin
+python-dotenv
+reportlab
+gunicorn
+flask-cors
+Werkzeug
+anthropic
